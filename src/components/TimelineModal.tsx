@@ -1,3 +1,4 @@
+import { useModalAccessibility } from '../ui/useModalAccessibility';
 import React from 'react';
 import { Clock, ExternalLink, Globe, Search, X } from 'lucide-react';
 import { IntentThread } from '../types';
@@ -8,24 +9,25 @@ interface TimelineModalProps {
 }
 
 export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose }) => {
+  const modalRef = useModalAccessibility(thread != null, onClose);
   if (!thread) return null;
 
   const sortedEvents = [...thread.events].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-dark-card border border-brand-cyan/40 rounded-2xl shadow-2xl p-6 text-slate-100 max-h-[85vh] flex flex-col overflow-hidden">
+    <div className="modal-backdrop">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Activity timeline" tabIndex={-1} className="modal-panel max-w-xl">
         {/* Accent bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-cyan via-brand-indigo to-brand-purple" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-teal via-brand-teal to-brand-teal" />
 
         {/* Header */}
         <div className="flex items-start justify-between mb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-cyan/20 border border-brand-cyan/40 flex items-center justify-center text-brand-cyan">
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-center text-brand-teal">
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-brand-cyan font-mono font-semibold">
+              <span className="text-xs uppercase tracking-wider text-brand-teal font-mono font-semibold">
                 Activity Sequence
               </span>
               <h2 className="text-lg font-bold text-white">
@@ -36,7 +38,7 @@ export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose })
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
+           aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -59,13 +61,13 @@ export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose })
               });
 
               return (
-                <div key={event.id || idx} className="relative pl-6 border-l-2 border-slate-700 hover:border-brand-cyan transition group">
+                <div key={event.id || idx} className="relative pl-6 border-l-2 border-slate-700 hover:border-brand-teal transition group">
                   {/* Timeline dot */}
-                  <div className="absolute -left-[7px] top-1 w-3 h-3 rounded-full bg-dark-card border-2 border-brand-cyan group-hover:scale-125 transition" />
+                  <div className="absolute -left-[7px] top-1 w-3 h-3 rounded-full bg-dark-card border-2 border-brand-teal group-hover:scale-125 transition" />
 
                   <div className="bg-dark-surface/60 border border-dark-border rounded-xl p-3 hover:border-slate-600 transition">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-mono text-brand-cyan font-semibold">
+                      <span className="font-mono text-brand-teal font-semibold">
                         {timeFormatted}
                       </span>
                       <span className="text-[10px] text-slate-400 font-mono uppercase px-2 py-0.5 rounded bg-slate-800">
@@ -75,9 +77,9 @@ export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose })
 
                     {event.searchQuery ? (
                       <div className="flex items-start gap-2 mt-1">
-                        <Search className="w-4 h-4 text-brand-amber flex-shrink-0 mt-0.5" />
+                        <Search className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                         <div>
-                          <div className="text-xs text-brand-amber font-mono">
+                          <div className="text-xs text-slate-400 font-mono">
                             {event.searchEngine || 'Search'}:
                           </div>
                           <div className="text-sm font-medium text-white">
@@ -87,7 +89,7 @@ export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose })
                       </div>
                     ) : (
                       <div className="flex items-start gap-2 mt-1">
-                        <Globe className="w-4 h-4 text-brand-cyan flex-shrink-0 mt-0.5" />
+                        <Globe className="w-4 h-4 text-brand-teal flex-shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-slate-400 font-mono truncate">
                             {event.domain}
@@ -101,7 +103,7 @@ export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose })
                             href={event.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-slate-400 hover:text-brand-cyan transition p-1"
+                            className="text-slate-400 hover:text-brand-teal transition p-1"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>

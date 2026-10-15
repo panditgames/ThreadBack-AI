@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
-function createPNG(width, height, r, g, b) {
+function createPNG(width, height) {
   // Signature
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -44,15 +44,17 @@ function createPNG(width, height, r, g, b) {
   for (let y = 0; y < height; y++) {
     rawData.writeUInt8(0, offset++); // Filter byte: None
     for (let x = 0; x < width; x++) {
-      // Create a nice gradient from cyan (6, 182, 212) to indigo (99, 102, 241)
-      const ratio = (x + y) / (width + height);
-      const pr = Math.round(r * (1 - ratio) + 99 * ratio);
-      const pg = Math.round(g * (1 - ratio) + 102 * ratio);
-      const pb = Math.round(b * (1 - ratio) + 241 * ratio);
-
-      rawData.writeUInt8(pr, offset++);
-      rawData.writeUInt8(pg, offset++);
-      rawData.writeUInt8(pb, offset++);
+      const nx = (x + .5) / width;
+      const ny = (y + .5) / height;
+      const nodes = [[.29, .3], [.71, .3], [.5, .71]];
+      const onNode = nodes.some(([cx, cy]) => Math.hypot(nx - cx, ny - cy) < .075);
+      const onLink = [nodes[0], nodes[1]].some(([ax, ay]) => {
+        const bx = .5, by = .71;
+        const t = Math.max(0, Math.min(1, ((nx - ax) * (bx - ax) + (ny - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)));
+        return Math.hypot(nx - ax - t * (bx - ax), ny - ay - t * (by - ay)) < .018;
+      });
+      const color = onNode || onLink ? [120, 216, 194] : [17, 22, 23];
+      for (const value of color) rawData.writeUInt8(value, offset++);
     }
   }
 
@@ -68,7 +70,7 @@ if (!fs.existsSync(iconsDir)) {
   fs.mkdirSync(iconsDir, { recursive: true });
 }
 
-fs.writeFileSync(path.join(iconsDir, 'icon16.png'), createPNG(16, 16, 6, 182, 212));
-fs.writeFileSync(path.join(iconsDir, 'icon48.png'), createPNG(48, 48, 6, 182, 212));
-fs.writeFileSync(path.join(iconsDir, 'icon128.png'), createPNG(128, 128, 6, 182, 212));
+fs.writeFileSync(path.join(iconsDir, 'icon16.png'), createPNG(16, 16));
+fs.writeFileSync(path.join(iconsDir, 'icon48.png'), createPNG(48, 48));
+fs.writeFileSync(path.join(iconsDir, 'icon128.png'), createPNG(128, 128));
 console.log('Generated brand icons in public/icons/');

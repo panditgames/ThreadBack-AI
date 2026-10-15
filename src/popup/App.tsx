@@ -74,28 +74,28 @@ export const PopupApp: React.FC = () => {
   };
 
   return (
-    <div className="w-[380px] min-h-[520px] max-h-[600px] bg-dark-bg text-slate-100 p-4 flex flex-col justify-between select-none">
+    <div className="popup-shell text-slate-100 p-5 flex flex-col gap-5 justify-between">
       <div>
         {/* Top bar */}
         <div className="flex items-center justify-between pb-3 border-b border-dark-border mb-3.5">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-brand-cyan to-brand-indigo flex items-center justify-center text-slate-950 font-black text-xs shadow-md">
+            <div className="brand-mark w-7 h-7 text-sm">
               TB
             </div>
             <div>
               <div className="text-xs font-bold text-white tracking-tight flex items-center gap-1.5">
                 ThreadBack AI
-                <span className="text-[9px] px-1.5 py-0.2 bg-brand-cyan/20 text-brand-cyan rounded font-mono font-bold">
+                <span className="text-[9px] px-1.5 py-0.2 bg-brand-teal/20 text-brand-teal rounded font-mono font-bold">
                   MV3
                 </span>
               </div>
-              <div className="text-[10px] text-slate-400">Current Intent Memory</div>
+              <div className="text-[10px] text-slate-400">Your work, in context</div>
             </div>
           </div>
 
           <button
             onClick={openDashboard}
-            className="text-[11px] text-brand-cyan hover:underline flex items-center gap-1 font-medium"
+            className="text-[11px] text-brand-teal hover:underline flex items-center gap-1 font-medium"
           >
             Dashboard <ExternalLink className="w-3 h-3" />
           </button>
@@ -103,17 +103,17 @@ export const PopupApp: React.FC = () => {
 
         {/* Current Active Intent Card */}
         {activeThread ? (
-          <div className="glass-panel rounded-2xl p-4 mb-3.5 border border-brand-cyan/30 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-cyan to-brand-indigo" />
+          <div className="glass-panel rounded-2xl p-4 mb-3.5 border border-dark-border relative">
+            <div className="absolute top-0 left-0 right-0 h-px bg-brand-teal/20" />
 
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase font-mono tracking-wider font-semibold text-brand-cyan">
-                Currently Inferred Goal
+              <span className="text-[10px] uppercase font-mono tracking-wider font-semibold text-brand-teal">
+                Current Intent
               </span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
                 activeThread.status === 'ACTIVE'
-                  ? 'bg-brand-emerald/20 text-brand-emerald border border-brand-emerald/30'
-                  : 'bg-brand-amber/20 text-brand-amber border border-brand-amber/30'
+                  ? 'bg-brand-teal/20 text-brand-teal border border-brand-teal/30'
+                  : 'bg-slate-400/20 text-slate-400 border border-slate-400/30'
               }`}>
                 {activeThread.status}
               </span>
@@ -130,7 +130,7 @@ export const PopupApp: React.FC = () => {
             {/* Next Action Box */}
             {activeThread.nextAction && (
               <div className="bg-dark-surface/80 border border-dark-border rounded-xl p-2.5 mb-3 text-xs">
-                <div className="text-[9px] uppercase font-mono text-brand-cyan font-semibold flex items-center gap-1 mb-0.5">
+                <div className="text-[9px] uppercase font-mono text-brand-teal font-semibold flex items-center gap-1 mb-0.5">
                   <Sparkles className="w-3 h-3" /> Next Action ({activeThread.nextAction.confidence})
                 </div>
                 <div className="font-medium text-slate-200 text-[11px] line-clamp-2">
@@ -142,13 +142,13 @@ export const PopupApp: React.FC = () => {
             {/* Tabs info */}
             <div className="text-[11px] text-slate-400 flex items-center justify-between mb-3.5">
               <span>{activeThread.tabs.length} related tabs in context</span>
-              <span className="font-mono text-brand-cyan">{Math.round(activeThread.confidence * 100)}% match</span>
+              <span className="font-mono text-brand-teal">{Math.round(activeThread.confidence * 100)}% match</span>
             </div>
 
             {/* Primary Action Button */}
             <button
               onClick={() => handleResume(activeThread)}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-indigo text-slate-950 font-bold text-xs hover:opacity-95 transition shadow-md shadow-brand-cyan/20 flex items-center justify-center gap-1.5"
+              className="action-primary w-full"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               Resume Task Context
@@ -168,7 +168,7 @@ export const PopupApp: React.FC = () => {
                 onClick={() => handleSetStatus('LIKELY_COMPLETE')}
                 className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition flex items-center justify-center gap-1"
               >
-                <CheckCircle2 className="w-3 h-3 text-brand-emerald" />
+                <CheckCircle2 className="w-3 h-3 text-brand-teal" />
                 Complete
               </button>
             </div>
@@ -183,7 +183,7 @@ export const PopupApp: React.FC = () => {
                 setActiveThread(demo[0]);
                 await storageManager.saveThreads(demo);
               }}
-              className="px-3 py-1.5 rounded-lg bg-brand-cyan text-slate-950 font-bold text-xs"
+              className="action-primary"
             >
               Load Demo Intent
             </button>
@@ -193,7 +193,7 @@ export const PopupApp: React.FC = () => {
         {/* Other Recent Intents */}
         <div>
           <div className="text-[10px] uppercase font-mono tracking-wider text-slate-400 font-semibold mb-2">
-            Other Active Tasks
+            Recent threads
           </div>
           <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
             {threads
@@ -202,23 +202,22 @@ export const PopupApp: React.FC = () => {
               .map(thread => (
                 <div
                   key={thread.id}
-                  onClick={() => setActiveThread(thread)}
                   className="flex items-center justify-between p-2 rounded-xl bg-dark-surface/50 border border-dark-border hover:border-slate-600 transition cursor-pointer"
                 >
-                  <div className="flex-1 min-w-0 mr-2">
+                  <button type="button" onClick={() => setActiveThread(thread)} aria-label={`Select ${thread.title}`} className="flex-1 min-w-0 mr-2 text-left">
                     <div className="text-xs font-semibold text-white truncate">
                       {thread.title}
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono">
                       {thread.tabs.length} tabs • {thread.status}
                     </div>
-                  </div>
+                  </button>
                   <button
                     onClick={e => {
                       e.stopPropagation();
                       handleResume(thread);
                     }}
-                    className="p-1 rounded-md bg-slate-800 hover:bg-brand-cyan hover:text-slate-950 text-slate-300 transition"
+                    className="p-1 rounded-md bg-slate-800 hover:bg-brand-teal hover:text-slate-950 text-slate-300 transition"
                     title="Quick resume"
                   >
                     <Play className="w-3 h-3 fill-current" />
@@ -232,7 +231,7 @@ export const PopupApp: React.FC = () => {
       {/* Footer */}
       <div className="pt-2.5 border-t border-dark-border flex items-center justify-between text-[10px] text-slate-500">
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-brand-emerald" />
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal" />
           <span>Local Engine Active</span>
         </div>
         <button

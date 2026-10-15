@@ -1,16 +1,20 @@
 # ThreadBack AI release handoff
 
-EurekaDev 2026 — Coding / Computer Science + AI. QA completed 15 October 2026 (Asia/Calcutta).
+EurekaDev 2026 — Coding / Computer Science + AI. QA and UI polish completed 15 October 2026 (Asia/Calcutta).
 
 ## Release gates
 
 - Typecheck: PASS (npm run typecheck).
-- Lint: PASS (npm run lint). ESLint/config were initially missing; added them. Final lint initially included an ignored temporary QA helper; the corrected scope passed the focused rerun.
-- Tests: 72 passed, 0 failed across 13 files in the final full run. Includes clustering, resume, explanation, storage, worker lifecycle, privacy, AI fallback and React workflows.
+- Lint: PASS (npm run lint).
+- Tests: 78 passed, 0 failed across 14 files in the final full run. Includes clustering, resume, explanation, storage, worker lifecycle, privacy, AI fallback and React workflows.
 - Production build: PASS (npm run build). Manifest V3, bundled module worker, popup/dashboard and icons generated in dist.
-- Performance: 10,000 synthetic events in 12.3 seconds, below the 90-second budget; incremental regression passed. Baseline was 56.5 seconds. This measures engine throughput, not a browser render benchmark.
+- Performance: 10,000 synthetic events in 11.1 seconds, below the 90-second budget; incremental regression passed. Baseline was 56.5 seconds. This measures engine throughput, not a browser render benchmark.
 - Secret/personal-data scan: PASS on final tracked/prospective files; manual fixture review found synthetic data only. Generated builds, dependencies, local QA logs, environment files and profiles are excluded.
-- Browser/extension QA: PARTIAL. Final production dashboard loaded in the in-app browser at 390px width. Demo mode showed three threads; search, EurekaDev timeline, measured Why signals and resume briefing worked. The mobile briefing fit the viewport. The automation transport timed out during dismissal and recovery, preventing remaining live interactions. Completion persistence and privacy controls passed React tests; worker/tab restoration/revoked-access behavior passed mocked API tests. Actual native Chrome/Edge unpacked loading, window focus, browser restart and final desktop/popup visual checks remain manual.
+- Browser/extension QA: PARTIAL. Polished production previews checked at 390px and 1366px: dashboard, popup and companion page load; three demo threads, search, Why, Timeline, Intent Graph, Resume briefing, Escape dismissal, completion and reload persistence work. Privacy controls remain disabled by default and narrow dialogs scroll. No page runtime errors observed. MV3 worker, local assets, entrypoints and icon dimensions pass the packaging smoke script. Actual native Chrome/Edge unpacked loading, window focus and browser restart remain manual.
+
+## UI polish and targeted fixes
+
+Charcoal/teal shared theme, glass surfaces, quieter typography/cards, consistent buttons and scrollable dialogs. Added modal focus trapping/Escape/focus restoration, keyboard task/graph/tab selection, Archived filtering, split-selection reset and all-tabs guard. Erase-all resets dashboard privacy/AI state so saving cannot restore an erased key. Six focused UI regressions added; TESTING.md contains a native extension smoke checklist.
 
 ## Defects fixed
 

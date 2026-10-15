@@ -51,14 +51,14 @@ export const SidepanelApp: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-dark-bg text-slate-100 p-4 flex flex-col justify-between">
+    <div className="min-h-screen text-slate-100 p-4 flex flex-col justify-between">
       <div>
         <div className="flex items-center justify-between pb-3 border-b border-dark-border mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-brand-cyan to-brand-indigo flex items-center justify-center text-slate-950 font-black text-xs">
+            <div className="brand-mark w-6 h-6 text-sm">
               TB
             </div>
-            <div className="text-xs font-bold text-white">Side Panel Intent Feed</div>
+            <div className="text-xs font-bold text-white">Your intent threads</div>
           </div>
           <button
             onClick={() => {
@@ -68,7 +68,7 @@ export const SidepanelApp: React.FC = () => {
                 window.open('/dashboard.html', '_blank');
               }
             }}
-            className="text-[11px] text-brand-cyan hover:underline flex items-center gap-1"
+            className="text-[11px] text-brand-teal hover:underline flex items-center gap-1"
           >
             Dashboard
           </button>
@@ -82,22 +82,23 @@ export const SidepanelApp: React.FC = () => {
             placeholder="Search intents..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-dark-card border border-dark-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-cyan"
+            className="w-full bg-dark-card border border-dark-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-teal"
           />
         </div>
 
         {/* Thread list */}
         <div className="space-y-3">
+          {filtered.length === 0 && <div className="glass-panel rounded-2xl p-5 text-sm text-slate-400">No matching threads. Try another search or open the dashboard.</div>}
           {filtered.map(thread => (
             <div
               key={thread.id}
-              className="glass-panel rounded-xl p-3 border border-dark-border hover:border-slate-600 transition"
+              className="glass-panel glass-panel-hover rounded-2xl p-4 border border-dark-border hover:border-slate-600 transition"
             >
               <div className="flex items-center justify-between mb-1">
                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
                   thread.status === 'ACTIVE'
-                    ? 'bg-brand-emerald/20 text-brand-emerald'
-                    : 'bg-brand-amber/20 text-brand-amber'
+                    ? 'bg-brand-teal/20 text-brand-teal'
+                    : 'bg-slate-400/20 text-slate-400'
                 }`}>
                   {thread.status}
                 </span>
@@ -106,13 +107,13 @@ export const SidepanelApp: React.FC = () => {
                 </span>
               </div>
 
-              <h3 className="text-xs font-bold text-white mb-1">
+              <h3 className="text-sm font-semibold text-white mb-2">
                 {thread.title}
               </h3>
 
               {thread.nextAction && (
                 <div className="text-[11px] text-slate-300 bg-dark-surface/60 rounded-lg p-2 mb-2 flex items-start gap-1.5">
-                  <Sparkles className="w-3 h-3 text-brand-cyan flex-shrink-0 mt-0.5" />
+                  <Sparkles className="w-3 h-3 text-brand-teal flex-shrink-0 mt-0.5" />
                   <span className="line-clamp-2">{thread.nextAction.actionText}</span>
                 </div>
               )}
@@ -137,7 +138,7 @@ export const SidepanelApp: React.FC = () => {
 
                 <button
                   onClick={() => handleResume(thread)}
-                  className="px-3 py-1 rounded-lg bg-brand-cyan text-slate-950 font-bold text-[11px] hover:opacity-90 flex items-center gap-1"
+                  className="action-primary"
                 >
                   <Play className="w-3 h-3 fill-current" />
                   Resume

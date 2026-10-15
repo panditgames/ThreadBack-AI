@@ -103,7 +103,7 @@ describe('Release UI persistence and privacy workflow', () => {
     await waitFor(async () => expect(Object.values((await storageManager.load()).threads).some(t => t.status === 'LIKELY_COMPLETE')).toBe(true));
     next.unmount();
     render(<DashboardApp />);
-    expect(await screen.findByText('Completed')).toBeInTheDocument();
+    expect(await screen.findByText('Completed', { selector: 'span' })).toBeInTheDocument();
   });
   it('keeps delete-all empty when dashboard reloads', async () => {
     await storageManager.clearAllData();

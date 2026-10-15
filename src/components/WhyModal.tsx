@@ -1,3 +1,4 @@
+import { useModalAccessibility } from '../ui/useModalAccessibility';
 import React from 'react';
 import { HelpCircle, Network, Search, Tag, Timer, X } from 'lucide-react';
 import { IntentThread } from '../types';
@@ -8,24 +9,25 @@ interface WhyModalProps {
 }
 
 export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
+  const modalRef = useModalAccessibility(thread != null, onClose);
   if (!thread) return null;
 
   const { evidence } = thread;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-dark-card border border-brand-indigo/40 rounded-2xl shadow-2xl p-6 text-slate-100 overflow-hidden">
+    <div className="modal-backdrop">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Why was this grouped?" tabIndex={-1} className="modal-panel max-w-lg">
         {/* Accent bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-indigo to-brand-purple" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-teal to-brand-teal" />
 
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-indigo/20 border border-brand-indigo/40 flex items-center justify-center text-brand-indigo">
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-center text-brand-teal">
               <HelpCircle className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-brand-indigo font-mono font-semibold">
+              <span className="text-xs uppercase tracking-wider text-brand-teal font-mono font-semibold">
                 Clustering Rationale
               </span>
               <h2 className="text-lg font-bold text-white">
@@ -36,7 +38,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
+           aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -52,7 +54,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
               key={index}
               className="flex items-start gap-2.5 bg-dark-surface/60 border border-dark-border rounded-xl p-3 text-sm text-slate-200"
             >
-              <div className="w-2 h-2 rounded-full bg-brand-cyan mt-1.5 flex-shrink-0" />
+              <div className="w-2 h-2 rounded-full bg-brand-teal mt-1.5 flex-shrink-0" />
               <span>{point}</span>
             </div>
           ))}
@@ -61,7 +63,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
         {/* Metric Badges */}
         <div className="grid grid-cols-2 gap-2 text-xs mb-5">
           <div className="bg-dark-surface/40 border border-dark-border rounded-lg p-2.5 flex items-center gap-2">
-            <Timer className="w-4 h-4 text-brand-cyan" />
+            <Timer className="w-4 h-4 text-brand-teal" />
             <div>
               <div className="text-[10px] text-slate-400 uppercase font-mono">Time Span</div>
               <div className="font-semibold text-slate-200">{evidence.timeSpanMinutes} minutes</div>
@@ -69,7 +71,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
           </div>
 
           <div className="bg-dark-surface/40 border border-dark-border rounded-lg p-2.5 flex items-center gap-2">
-            <Network className="w-4 h-4 text-brand-purple" />
+            <Network className="w-4 h-4 text-brand-teal" />
             <div>
               <div className="text-[10px] text-slate-400 uppercase font-mono">Domains</div>
               <div className="font-semibold text-slate-200">{evidence.primaryDomains.length} involved</div>
@@ -77,7 +79,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
           </div>
 
           <div className="bg-dark-surface/40 border border-dark-border rounded-lg p-2.5 flex items-center gap-2">
-            <Tag className="w-4 h-4 text-brand-emerald" />
+            <Tag className="w-4 h-4 text-brand-teal" />
             <div>
               <div className="text-[10px] text-slate-400 uppercase font-mono">Top Keywords</div>
               <div className="font-semibold text-slate-200 truncate max-w-[130px]">
@@ -87,7 +89,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
           </div>
 
           <div className="bg-dark-surface/40 border border-dark-border rounded-lg p-2.5 flex items-center gap-2">
-            <Search className="w-4 h-4 text-brand-amber" />
+            <Search className="w-4 h-4 text-slate-400" />
             <div>
               <div className="text-[10px] text-slate-400 uppercase font-mono">Query Bridge</div>
               <div className="font-semibold text-slate-200">

@@ -9,3 +9,7 @@ Targeted checks can run with npx vitest run tests/integration/releaseRegression.
 Run node scripts/releaseScan.js before committing. It scans tracked and prospective files for recognizable keys, private-key markers, user paths, email addresses and unsafe artifact filenames. It supplements manual review; it is not a proof that every possible secret is absent.
 
 Native Chrome/Edge extension loading, actual browser restart, and cross-window focus require manual verification when only the in-app browser is available. Mocked APIs cover worker synchronization and tab restoration; web preview cannot restore tabs. See HANDOFF.md for current results.
+
+After building, run node scripts/verifyExtension.js to check the MV3 manifest, local entrypoints/assets, worker and icon dimensions. Targeted polish coverage: npx vitest run tests/ui/polish.test.tsx.
+
+Native unpacked smoke checklist (use a separate browser profile): load dist in Chrome/Edge Developer mode; check popup and dashboard; load Demo Data and confirm three threads; open Timeline, Why and Intent Graph; resume a thread with open and closed tabs; search, rename, archive and split; reload and confirm persistence; verify content analysis is disabled; erase all data and confirm settings remain reset after saving/reloading. Check keyboard Tab/Escape and narrow dialog scrolling. The companion sidepanel.html page is built but native side-panel registration remains unimplemented.

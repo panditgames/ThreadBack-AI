@@ -172,25 +172,25 @@ export const DashboardApp: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-dark-bg text-slate-100 p-6 md:p-10 max-w-7xl mx-auto flex flex-col justify-between">
+    <div className="min-h-screen text-slate-100 p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto flex flex-col justify-between">
       <div>
         {/* Top Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-dark-border mb-6">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-5 pb-8 border-b border-dark-border/70 mb-8">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-brand-cyan to-brand-indigo flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-brand-cyan/20">
+            <div className="brand-mark w-11 h-11 text-sm">
               TB
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black tracking-tight text-white">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="text-2xl font-semibold tracking-tight text-white">
                   ThreadBack AI
                 </h1>
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30">
-                  v1.0 • EurekaDev 2026
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-dark-surface/70 text-slate-400 border border-dark-border">
+                  EurekaDev 2026
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Remembers what you were trying to accomplish across browser tabs
+                Pick up where your thinking left off.
               </p>
             </div>
           </div>
@@ -199,10 +199,10 @@ export const DashboardApp: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleLoadDemoData}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center gap-1.5"
+              className="action-secondary border-brand-teal/25 text-brand-teal"
               title="Reset with deterministic judge demo dataset"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-brand-purple" />
+              <RefreshCw className="w-3.5 h-3.5 text-brand-teal" />
               Demo Data
             </button>
 
@@ -216,10 +216,10 @@ export const DashboardApp: React.FC = () => {
 
             <button
               onClick={() => setIsPrivacyOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-dark-surface hover:bg-slate-800 text-slate-200 border border-dark-border text-xs font-semibold transition flex items-center gap-1.5"
+              className="action-secondary"
               title="Privacy & AI Settings"
             >
-              <Shield className="w-3.5 h-3.5 text-brand-emerald" />
+              <Shield className="w-3.5 h-3.5 text-brand-teal" />
               Privacy Center
             </button>
           </div>
@@ -227,21 +227,21 @@ export const DashboardApp: React.FC = () => {
 
         {/* Interruption Recovery Banner (Feature 6) */}
         {interruption && (
-          <div className="mb-6 bg-gradient-to-r from-brand-cyan/15 via-brand-indigo/10 to-transparent border border-brand-cyan/40 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+          <div className="mb-8 glass-panel border border-dark-border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
             <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-brand-cyan/20 border border-brand-cyan/40 flex items-center justify-center text-brand-cyan flex-shrink-0 mt-0.5">
+              <div className="w-9 h-9 rounded-xl bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-center text-brand-teal flex-shrink-0 mt-0.5">
                 <AlertCircle className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-xs uppercase font-mono tracking-wider text-brand-cyan font-bold">
-                  Interruption Detected • You left this task {interruption.inactiveTimeFormatted}
+                <div className="text-[10px] uppercase tracking-widest text-slate-400 font-medium">
+                  Ready when you are • Last active {interruption.inactiveTimeFormatted}
                 </div>
                 <div className="text-base font-bold text-white mt-0.5">
                   {interruption.threadTitle}
                 </div>
                 <div className="text-xs text-slate-300 mt-1 flex flex-wrap gap-x-3 gap-y-1">
                   <span>Last action: <strong className="text-white">{interruption.lastObservedAction}</strong></span>
-                  <span>Next: <strong className="text-brand-cyan">{interruption.nextAction}</strong></span>
+                  <span>Next: <strong className="text-brand-teal">{interruption.nextAction}</strong></span>
                 </div>
               </div>
             </div>
@@ -251,7 +251,7 @@ export const DashboardApp: React.FC = () => {
                 const target = threads.find(t => t.id === interruption.threadId);
                 if (target) handleResumeTask(target);
               }}
-              className="px-5 py-2 rounded-xl bg-brand-cyan hover:bg-brand-cyan/90 text-slate-950 font-bold text-xs transition shadow-md shadow-brand-cyan/20 flex items-center justify-center gap-1.5 flex-shrink-0"
+              className="action-primary shrink-0"
             >
               <Play className="w-4 h-4 fill-current" />
               Resume Context
@@ -259,33 +259,38 @@ export const DashboardApp: React.FC = () => {
           </div>
         )}
 
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-medium text-slate-200">Your intent threads</h2>
+          <span className="text-[11px] text-slate-500">{filteredThreads.length} {filteredThreads.length === 1 ? 'thread' : 'threads'} in view</span>
+        </div>
         {/* Search & Filter Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6">
           {/* Search Box (Feature 9) */}
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 lg:max-w-md">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search intent threads, tasks, keywords, domains..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-dark-card border border-dark-border rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-cyan transition"
+              className="w-full bg-dark-card border border-dark-border rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-teal transition"
             />
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex rounded-xl bg-dark-card p-1 border border-dark-border text-xs">
-            {(['ALL', 'ACTIVE', 'PAUSED', 'LIKELY_COMPLETE'] as const).map(filterKey => (
+          <div className="flex flex-wrap gap-1 rounded-xl bg-dark-card/70 p-1 border border-dark-border text-[11px]">
+            {(['ALL', 'ACTIVE', 'PAUSED', 'LIKELY_COMPLETE', 'ARCHIVED'] as const).map(filterKey => (
               <button
                 key={filterKey}
+                aria-pressed={statusFilter === filterKey}
                 onClick={() => setStatusFilter(filterKey)}
                 className={`px-3 py-1.5 rounded-lg font-medium transition ${
                   statusFilter === filterKey
-                    ? 'bg-slate-800 text-white shadow'
+                    ? 'bg-brand-teal/10 text-brand-teal shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {filterKey === 'ALL' ? 'All Tasks' : filterKey.replace('_', ' ')}
+                {filterKey === 'ALL' ? 'All Tasks' : filterKey === 'LIKELY_COMPLETE' ? 'Completed' : filterKey === 'ARCHIVED' ? 'Archived' : filterKey === 'ACTIVE' ? 'Active' : 'Paused'}
               </button>
             ))}
           </div>
@@ -293,7 +298,7 @@ export const DashboardApp: React.FC = () => {
 
         {/* Grid of Task Cards (Feature 7) */}
         {filteredThreads.length === 0 ? (
-          <div className="glass-panel rounded-2xl p-12 text-center my-8">
+          <div className="glass-panel rounded-2xl px-6 py-14 text-center my-8">
             <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 mx-auto mb-3">
               <Search className="w-6 h-6" />
             </div>
@@ -301,17 +306,17 @@ export const DashboardApp: React.FC = () => {
               No matching intent threads
             </h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-              {searchQuery ? `No tasks found matching "${searchQuery}".` : 'Browse normally in tabs or click below to populate the interactive demo.'}
+              {searchQuery ? `No tasks found matching "${searchQuery}".` : 'Your next task starts here. Browse normally, or explore three sample threads with demo data.'}
             </p>
             <button
               onClick={handleLoadDemoData}
-              className="px-4 py-2 rounded-xl bg-brand-cyan text-slate-950 font-bold text-xs hover:opacity-90 transition"
+              className="action-primary"
             >
               Load Demo Intent Threads
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {filteredThreads.map(thread => (
               <TaskCard
                 key={thread.id}
@@ -333,7 +338,7 @@ export const DashboardApp: React.FC = () => {
       {/* Footer */}
       <footer className="mt-12 pt-6 border-t border-dark-border/60 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-brand-emerald" />
+          <span className="w-2 h-2 rounded-full bg-brand-teal" />
           <span>Local deterministic intent engine active</span>
         </div>
         <div className="font-mono text-[11px] text-slate-400">
@@ -390,6 +395,8 @@ export const DashboardApp: React.FC = () => {
         }}
         onClearAll={async () => {
           await storageManager.clearAllData();
+          setPrivacy(DEFAULT_PRIVACY_SETTINGS);
+          setAiSettings(DEFAULT_AI_SETTINGS);
           setThreads([]);
           setInterruption(null);
         }}

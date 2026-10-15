@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useModalAccessibility } from '../ui/useModalAccessibility';
+import React, { useEffect, useState } from 'react';
 import { Check, Layers, Split, X } from 'lucide-react';
 import { IntentThread } from '../types';
 
@@ -22,6 +23,8 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [mergeTargetId, setMergeTargetId] = useState('');
 
+  useEffect(() => { setSelectedUrls([]); setNewTitle(''); setMergeTargetId(''); setMode('split'); }, [sourceThread?.id]);
+  const modalRef = useModalAccessibility(sourceThread != null, onClose);
   if (!sourceThread) return null;
 
   const toggleUrl = (url: string) => {
@@ -32,7 +35,7 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
 
   const handleSplitSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedUrls.length === 0) return;
+    if (selectedUrls.length === 0 || selectedUrls.length === sourceThread.tabs.length) return;
     await onSplit(sourceThread.id, selectedUrls, newTitle.trim() || 'Split Task');
     onClose();
   };
@@ -47,16 +50,16 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
   const otherThreads = allThreads.filter(t => t.id !== sourceThread.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-dark-card border border-brand-purple/40 rounded-2xl shadow-2xl p-6 text-slate-100 overflow-hidden">
+    <div className="modal-backdrop">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Merge or split task" tabIndex={-1} className="modal-panel max-w-lg">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-purple/20 border border-brand-purple/40 flex items-center justify-center text-brand-purple">
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-center text-brand-teal">
               {mode === 'split' ? <Split className="w-5 h-5" /> : <Layers className="w-5 h-5" />}
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-brand-purple font-mono font-semibold">
+              <span className="text-xs uppercase tracking-wider text-brand-teal font-mono font-semibold">
                 Refine Intent Threads
               </span>
               <h2 className="text-lg font-bold text-white">
@@ -67,7 +70,7 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
+           aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -77,7 +80,7 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
           <button
             onClick={() => setMode('split')}
             className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${
-              mode === 'split' ? 'bg-brand-purple text-white shadow' : 'text-slate-400 hover:text-white'
+              mode === 'split' ? 'bg-brand-teal/10 text-brand-teal shadow-sm' : 'text-slate-400 hover:text-white'
             }`}
           >
             Split Tabs into New Thread
@@ -85,7 +88,7 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
           <button
             onClick={() => setMode('merge')}
             className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${
-              mode === 'merge' ? 'bg-brand-purple text-white shadow' : 'text-slate-400 hover:text-white'
+              mode === 'merge' ? 'bg-brand-teal text-white shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
             Merge into Another Thread
@@ -101,9 +104,10 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
               <input
                 type="text"
                 placeholder="e.g. Compare Alternative Headphone Brand"
+                aria-label="New thread title"
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:ring-1 focus:ring-brand-purple focus:outline-none"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:ring-1 focus:ring-brand-teal focus:outline-none"
               />
             </div>
 
@@ -115,15 +119,17 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
                 {sourceThread.tabs.map(tab => (
                   <div
                     key={tab.id}
+                    role="checkbox" aria-checked={selectedUrls.includes(tab.url)} tabIndex={0} aria-label={tab.title}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleUrl(tab.url); } }}
                     onClick={() => toggleUrl(tab.url)}
                     className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition ${
                       selectedUrls.includes(tab.url)
-                        ? 'bg-brand-purple/20 border-brand-purple text-white'
+                        ? 'bg-brand-teal/20 border-brand-teal text-white'
                         : 'bg-dark-surface/60 border-dark-border text-slate-300 hover:border-slate-600'
                     }`}
                   >
                     <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                      selectedUrls.includes(tab.url) ? 'bg-brand-purple border-brand-purple text-white' : 'border-slate-600'
+                      selectedUrls.includes(tab.url) ? 'bg-brand-teal border-brand-teal text-white' : 'border-slate-600'
                     }`}>
                       {selectedUrls.includes(tab.url) && <Check className="w-3 h-3" />}
                     </div>
@@ -146,8 +152,8 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={selectedUrls.length === 0}
-                className="px-4 py-1.5 rounded-lg bg-brand-purple hover:bg-brand-purple/90 disabled:opacity-40 text-white font-semibold text-xs transition"
+                disabled={selectedUrls.length === 0 || selectedUrls.length === sourceThread.tabs.length}
+                className="action-primary"
               >
                 Extract Tabs
               </button>
@@ -165,7 +171,7 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
                 <select
                   value={mergeTargetId}
                   onChange={e => setMergeTargetId(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:ring-1 focus:ring-brand-purple focus:outline-none"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:ring-1 focus:ring-brand-teal focus:outline-none"
                   required
                 >
                   <option value="">Select target thread...</option>
@@ -189,7 +195,7 @@ export const MergeSplitModal: React.FC<MergeSplitModalProps> = ({
               <button
                 type="submit"
                 disabled={!mergeTargetId}
-                className="px-4 py-1.5 rounded-lg bg-brand-purple hover:bg-brand-purple/90 disabled:opacity-40 text-white font-semibold text-xs transition"
+                className="action-primary"
               >
                 Merge Threads
               </button>

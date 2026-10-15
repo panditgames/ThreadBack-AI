@@ -1,3 +1,4 @@
+import { useModalAccessibility } from '../ui/useModalAccessibility';
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Bot, Check, Key, Lock, Shield, Trash2, X } from 'lucide-react';
 import { AISettings, PrivacySettings } from '../types';
@@ -42,6 +43,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
     setModelName(aiSettings.modelName || '');
   }, [isOpen, privacy, aiSettings]);
 
+  const modalRef = useModalAccessibility(isOpen != null && isOpen, onClose);
   if (!isOpen) return null;
 
   const handleSave = async () => {
@@ -67,16 +69,16 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-dark-card border border-dark-border rounded-2xl shadow-2xl p-6 text-slate-100 max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="modal-backdrop">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Privacy settings" tabIndex={-1} className="modal-panel max-w-xl">
         {/* Header */}
         <div className="flex items-start justify-between mb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-emerald/20 border border-brand-emerald/40 flex items-center justify-center text-brand-emerald">
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-center text-brand-teal">
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-brand-emerald font-mono font-semibold">
+              <span className="text-xs uppercase tracking-wider text-brand-teal font-mono font-semibold">
                 Privacy Center & Engine Settings
               </span>
               <h2 className="text-lg font-bold text-white">
@@ -87,7 +89,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
+           aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -97,11 +99,11 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
           {/* Privacy Guarantee Box */}
           <div className="bg-dark-surface/80 border border-dark-border rounded-xl p-4 space-y-2">
             <div className="flex items-center gap-2 text-white font-semibold text-sm">
-              <Lock className="w-4 h-4 text-brand-cyan" />
+              <Lock className="w-4 h-4 text-brand-teal" />
               100% Local Processing by Default
             </div>
             <p className="text-slate-400 leading-relaxed">
-              ThreadBack stores metadata strictly in your browser's local memory (<code className="text-brand-cyan">chrome.storage.local</code>). Zero browsing history, URLs, or queries are ever sent to remote analytics or third-party servers.
+              ThreadBack stores metadata strictly in your browser's local memory (<code className="text-brand-teal">chrome.storage.local</code>). Zero browsing history, URLs, or queries are ever sent to remote analytics or third-party servers.
             </p>
             <div className="pt-2 text-[11px] text-slate-400 font-mono space-y-1">
               <div>✓ Stored: Page title, URL, domain, timestamps, tab relationships</div>
@@ -128,7 +130,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
                 onChange={e => setAllowContentAnalysis(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-cyan"></div>
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-teal"></div>
             </label>
           </div>
 
@@ -142,7 +144,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-semibold text-sm text-white flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-brand-purple" />
+                  <Bot className="w-4 h-4 text-brand-teal" />
                   Optional AI Enhancement Layer
                 </div>
                 <div className="text-slate-400 max-w-sm mt-0.5">
@@ -158,7 +160,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
                   onChange={e => setAiEnabled(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-purple"></div>
+                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-teal"></div>
               </label>
             </div>
 
@@ -171,7 +173,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
                   <select
                     value={provider}
                     onChange={e => setProvider(e.target.value as any)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:ring-1 focus:ring-brand-purple"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs focus:ring-1 focus:ring-brand-teal"
                   >
                     <option value="gemini">Google Gemini API (gemini-1.5-flash)</option>
                     <option value="groq">Groq (llama-3.1-8b-instant)</option>
@@ -181,7 +183,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
 
                 <div>
                   <label className="block text-slate-400 uppercase font-mono text-[10px] mb-1 flex items-center gap-1">
-                    <Key className="w-3 h-3 text-brand-amber" />
+                    <Key className="w-3 h-3 text-slate-400" />
                     Personal API Key (Stored strictly in your local extension memory)
                   </label>
                   <input
@@ -189,7 +191,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
                     placeholder="Enter your API key..."
                     value={apiKey}
                     onChange={e => setApiKey(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono focus:ring-1 focus:ring-brand-purple"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono focus:ring-1 focus:ring-brand-teal"
                   />
                 </div>
 
@@ -202,7 +204,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
                     placeholder="e.g. gemini-1.5-flash or gpt-4o-mini"
                     value={modelName}
                     onChange={e => setModelName(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono focus:ring-1 focus:ring-brand-purple"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-xs font-mono focus:ring-1 focus:ring-brand-teal"
                   />
                 </div>
               </div>
@@ -210,8 +212,8 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
           </div>
 
           {/* Danger Zone: Data Management */}
-          <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-4 space-y-3">
-            <div className="text-red-400 font-semibold text-sm flex items-center gap-2">
+          <div className="bg-dark-bg/50 border border-slate-900/40 rounded-xl p-4 space-y-3">
+            <div className="text-slate-400 font-semibold text-sm flex items-center gap-2">
               <AlertTriangle className="w-4 h-4" />
               Data Clearance Controls
             </div>
@@ -239,14 +241,14 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
                     setConfirmClearAll(false);
                     onClose();
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition"
+                  className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-700 text-white font-semibold transition"
                 >
                   Yes, Erase Everything
                 </button>
               ) : (
                 <button
                   onClick={() => setConfirmClearAll(true)}
-                  className="px-3 py-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/50 text-red-300 border border-red-800/40 transition"
+                  className="px-3 py-1.5 rounded-lg bg-slate-950/50 hover:bg-slate-900/50 text-slate-300 border border-slate-800/40 transition"
                 >
                   Erase All ThreadBack Data
                 </button>
@@ -257,7 +259,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
 
         {/* Footer */}
         <div className="mt-4 pt-3 border-t border-dark-border flex items-center justify-between flex-shrink-0">
-          <div className="text-xs text-brand-emerald flex items-center gap-1">
+          <div className="text-xs text-brand-teal flex items-center gap-1">
             {saveSuccess && (
               <>
                 <Check className="w-3.5 h-3.5" /> Settings Saved!
@@ -273,7 +275,7 @@ export const PrivacySettingsModal: React.FC<PrivacySettingsModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-1.5 rounded-lg bg-brand-cyan hover:bg-brand-cyan/90 text-slate-950 font-semibold text-xs transition shadow-md shadow-brand-cyan/20"
+              className="action-primary"
             >
               Save Preferences
             </button>

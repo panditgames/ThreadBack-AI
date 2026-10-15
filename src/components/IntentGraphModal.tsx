@@ -1,3 +1,4 @@
+import { useModalAccessibility } from '../ui/useModalAccessibility';
 import React, { useState } from 'react';
 import { ArrowDown, CheckCircle2, CircleDot, ExternalLink, GitBranch, Sparkles, Target, X } from 'lucide-react';
 import { buildIntentGraph } from '../engine/graphBuilder';
@@ -11,24 +12,25 @@ interface IntentGraphModalProps {
 export const IntentGraphModal: React.FC<IntentGraphModalProps> = ({ thread, onClose }) => {
   const [selectedNode, setSelectedNode] = useState<IntentGraphNode | null>(null);
 
+  const modalRef = useModalAccessibility(thread != null, onClose);
   if (!thread) return null;
 
   const graph = buildIntentGraph(thread);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-dark-card border border-brand-purple/40 rounded-2xl shadow-2xl p-6 text-slate-100 max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="modal-backdrop">
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Intent graph" tabIndex={-1} className="modal-panel max-w-2xl">
         {/* Accent bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-purple via-brand-cyan to-brand-emerald" />
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-teal via-brand-teal to-brand-teal" />
 
         {/* Header */}
         <div className="flex items-start justify-between mb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-purple/20 border border-brand-purple/40 flex items-center justify-center text-brand-purple">
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 border border-brand-teal/20 flex items-center justify-center text-brand-teal">
               <GitBranch className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-brand-purple font-mono font-semibold">
+              <span className="text-xs uppercase tracking-wider text-brand-teal font-mono font-semibold">
                 Structured Intent Graph
               </span>
               <h2 className="text-lg font-bold text-white">
@@ -39,7 +41,7 @@ export const IntentGraphModal: React.FC<IntentGraphModalProps> = ({ thread, onCl
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
+           aria-label="Close dialog">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -59,29 +61,29 @@ export const IntentGraphModal: React.FC<IntentGraphModalProps> = ({ thread, onCl
                 {/* Node Box */}
                 <div
                   onClick={() => setSelectedNode(node)}
-                  className={`w-full p-4 rounded-xl border transition cursor-pointer ${
+                  className={`w-full text-left p-4 rounded-xl border transition cursor-pointer ${
                     node.type === 'goal'
-                      ? 'bg-gradient-to-r from-brand-purple/20 via-brand-indigo/15 to-transparent border-brand-purple/50'
+                      ? 'bg-dark-surface/50 border-brand-teal/50'
                       : node.type === 'completed_step'
-                      ? 'bg-dark-surface/70 border-brand-emerald/40 hover:border-brand-emerald/70'
+                      ? 'bg-dark-surface/70 border-brand-teal/40 hover:border-brand-teal/70'
                       : node.type === 'current_step'
-                      ? 'bg-brand-cyan/10 border-brand-cyan/60 shadow-lg shadow-brand-cyan/10'
-                      : 'bg-dark-surface/40 border-brand-amber/40 border-dashed hover:border-brand-amber/70'
-                  } ${isSelected ? 'ring-2 ring-brand-cyan' : ''}`}
+                      ? 'bg-brand-teal/10 border-brand-teal/60 shadow-lg shadow-brand-teal/10'
+                      : 'bg-dark-surface/40 border-slate-400/40 border-dashed hover:border-slate-400/70'
+                  } ${isSelected ? 'ring-2 ring-brand-teal' : ''}`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
                       {node.type === 'goal' && (
-                        <Target className="w-4 h-4 text-brand-purple" />
+                        <Target className="w-4 h-4 text-brand-teal" />
                       )}
                       {node.type === 'completed_step' && (
-                        <CheckCircle2 className="w-4 h-4 text-brand-emerald" />
+                        <CheckCircle2 className="w-4 h-4 text-brand-teal" />
                       )}
                       {node.type === 'current_step' && (
-                        <CircleDot className="w-4 h-4 text-brand-cyan animate-pulse" />
+                        <CircleDot className="w-4 h-4 text-brand-teal " />
                       )}
                       {node.type === 'remaining_step' && (
-                        <Sparkles className="w-4 h-4 text-brand-amber" />
+                        <Sparkles className="w-4 h-4 text-slate-400" />
                       )}
 
                       <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-slate-300">
@@ -101,16 +103,16 @@ export const IntentGraphModal: React.FC<IntentGraphModalProps> = ({ thread, onCl
                         target="_blank"
                         rel="noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="text-xs text-brand-cyan hover:underline flex items-center gap-1"
+                        className="text-xs text-brand-teal hover:underline flex items-center gap-1"
                       >
                         Inspect link <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
                   </div>
 
-                  <div className="text-sm font-semibold text-white">
+                  <button type="button" aria-pressed={isSelected} onClick={() => setSelectedNode(node)} className="text-sm text-left w-full font-semibold text-white">
                     {node.label}
-                  </div>
+                  </button>
 
                   {/* Inline Evidence Summary */}
                   {node.evidence && node.evidence.length > 0 && (
@@ -141,13 +143,13 @@ export const IntentGraphModal: React.FC<IntentGraphModalProps> = ({ thread, onCl
         <div className="mt-4 pt-3 border-t border-dark-border flex items-center justify-between flex-shrink-0 text-xs text-slate-400">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-brand-emerald" /> Completed
+              <span className="w-2 h-2 rounded-full bg-brand-teal" /> Completed
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-brand-cyan" /> Current
+              <span className="w-2 h-2 rounded-full bg-brand-teal" /> Current
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-brand-amber" /> Remaining
+              <span className="w-2 h-2 rounded-full bg-slate-400" /> Remaining
             </span>
           </div>
           <button

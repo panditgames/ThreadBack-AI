@@ -57,21 +57,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     switch (thread.status) {
       case 'ACTIVE':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-emerald/15 text-brand-emerald border border-brand-emerald/30">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-emerald animate-pulse" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-teal/15 text-brand-teal border border-brand-teal/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-teal " />
             Active
           </span>
         );
       case 'PAUSED':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-amber/15 text-brand-amber border border-brand-amber/30">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-amber" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-400/15 text-slate-400 border border-slate-400/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
             Paused
           </span>
         );
       case 'LIKELY_COMPLETE':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-indigo/20 text-brand-indigo border border-brand-indigo/30">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-dark-surface/70 text-slate-400 border border-dark-border">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Completed
           </span>
@@ -86,18 +86,18 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   };
 
   return (
-    <div className="glass-panel glass-panel-hover rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between group">
+    <div data-status={thread.status} className="task-card glass-panel glass-panel-hover group">
       {/* Top subtle highlight */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-brand-cyan/20 to-transparent group-hover:via-brand-cyan/60 transition duration-300" />
+      <div className="absolute top-0 left-0 right-0 rounded-t-2xl h-px bg-gradient-to-r from-transparent via-brand-teal/20 to-transparent group-hover:via-brand-teal/60 transition duration-300" />
 
       {/* Header Row */}
       <div>
         <div className="flex items-start justify-between gap-3 mb-2.5">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               {getStatusBadge()}
               {thread.isDemo && (
-                <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-brand-purple/20 text-brand-purple border border-brand-purple/30">
+                <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-brand-teal/20 text-brand-teal border border-brand-teal/30">
                   Demo Data
                 </span>
               )}
@@ -111,26 +111,28 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               <form onSubmit={handleTitleSubmit} className="flex items-center gap-2 mt-1">
                 <input
                   type="text"
+                  aria-label="Task title"
                   value={editedTitle}
                   onChange={e => setEditedTitle(e.target.value)}
-                  className="bg-slate-800 text-white font-bold text-base px-2.5 py-1 rounded-lg border border-brand-cyan focus:outline-none w-full"
+                  className="bg-slate-800 text-white font-bold text-base px-2.5 py-1 rounded-lg border border-brand-teal focus:outline-none w-full"
                   autoFocus
                 />
                 <button
                   type="submit"
-                  className="p-1 rounded-md bg-brand-cyan text-slate-950 hover:bg-brand-cyan/90 transition"
+                  aria-label="Save task title"
+                  className="action-primary"
                 >
                   <Check className="w-4 h-4" />
                 </button>
               </form>
             ) : (
               <div className="flex items-center gap-2 group/title">
-                <h3 className="text-base font-bold text-white truncate hover:text-brand-cyan transition">
+                <h3 className="text-lg font-semibold text-white leading-snug break-words">
                   {thread.title}
                 </h3>
                 <button
                   onClick={() => setIsEditingTitle(true)}
-                  className="opacity-0 group-hover/title:opacity-100 p-1 text-slate-400 hover:text-white transition"
+                  className="opacity-60 hover:opacity-100 focus-visible:opacity-100 p-1 text-slate-400 hover:text-white transition"
                   title="Rename Intent"
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -140,9 +142,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           </div>
 
           {/* Context Menu Dropdown */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               aria-label="Task actions"
+              aria-expanded={showMenu}
               onClick={() => setShowMenu(!showMenu)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
             >
@@ -151,7 +154,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
             {showMenu && (
               <div 
-                className="absolute right-0 top-8 z-30 w-44 bg-dark-card border border-dark-border rounded-xl shadow-2xl p-1.5 space-y-0.5 text-xs text-slate-200 animate-in fade-in"
+                className="absolute right-0 top-8 z-30 w-44 bg-dark-card border border-dark-border rounded-xl shadow-2xl shadow-black/60 p-1.5 space-y-0.5 text-xs text-slate-200 animate-in fade-in"
                 onMouseLeave={() => setShowMenu(false)}
               >
                 <button
@@ -170,7 +173,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   }}
                   className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-800 flex items-center gap-2"
                 >
-                  <Split className="w-3.5 h-3.5 text-brand-purple" /> Split Tabs
+                  <Split className="w-3.5 h-3.5 text-brand-teal" /> Split Tabs
                 </button>
                 <button
                   onClick={() => {
@@ -179,7 +182,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   }}
                   className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-800 flex items-center gap-2"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-brand-emerald" /> 
+                  <CheckCircle2 className="w-3.5 h-3.5 text-brand-teal" />
                   {thread.status === 'LIKELY_COMPLETE' ? 'Mark Active' : 'Mark Complete'}
                 </button>
                 <button
@@ -198,7 +201,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                     onDelete(thread.id);
                     setShowMenu(false);
                   }}
-                  className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-red-950/40 text-red-400 flex items-center gap-2"
+                  className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-slate-950/40 text-slate-400 flex items-center gap-2"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Delete Thread
                 </button>
@@ -208,22 +211,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </div>
 
         {/* Summary */}
-        <p className="text-xs text-slate-400 mb-3.5 line-clamp-2 leading-relaxed">
+        <p className="text-[13px] text-slate-400 mt-2 mb-5 line-clamp-2 leading-relaxed">
           {thread.summary}
         </p>
 
         {/* Milestone lists */}
-        <div className="space-y-2 mb-4 bg-dark-surface/40 border border-dark-border/60 rounded-xl p-3">
+        <div className="space-y-3 mb-4 bg-dark-bg/35 border border-dark-border/60 rounded-xl p-3.5">
           {/* Completed */}
           {thread.completedSteps.length > 0 && (
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-brand-emerald font-semibold mb-1">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-brand-teal font-semibold mb-1">
                 Likely Completed
               </div>
               <ul className="space-y-1 text-xs text-slate-300">
                 {thread.completedSteps.slice(0, 2).map((s, idx) => (
                   <li key={idx} className="flex items-center gap-1.5 truncate">
-                    <span className="text-brand-emerald font-bold">✓</span>
+                    <span className="text-brand-teal font-bold">✓</span>
                     <span className="truncate">{s.title}</span>
                   </li>
                 ))}
@@ -234,13 +237,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {/* Remaining */}
           {thread.unfinishedSteps.length > 0 && (
             <div className={thread.completedSteps.length > 0 ? 'pt-2 border-t border-slate-800' : ''}>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-brand-amber font-semibold mb-1">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold mb-1">
                 Likely Remaining
               </div>
               <ul className="space-y-1 text-xs text-slate-300">
                 {thread.unfinishedSteps.slice(0, 2).map((s, idx) => (
                   <li key={idx} className="flex items-center gap-1.5 truncate">
-                    <span className="text-brand-amber font-bold">•</span>
+                    <span className="text-slate-400 font-bold">•</span>
                     <span className="truncate">{s.title}</span>
                   </li>
                 ))}
@@ -251,8 +254,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
         {/* Next Action Box */}
         {thread.nextAction && (
-          <div className="bg-brand-cyan/10 border border-brand-cyan/30 rounded-xl p-2.5 mb-4">
-            <div className="text-[10px] uppercase font-mono tracking-wider text-brand-cyan font-semibold flex items-center gap-1">
+          <div className="next-action mb-5">
+            <div className="text-[10px] uppercase tracking-wider text-brand-teal font-semibold flex items-center gap-1">
               <Sparkles className="w-3 h-3" /> Next Likely Step
             </div>
             <div className="text-xs font-semibold text-white mt-0.5 line-clamp-2">
@@ -285,31 +288,31 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
       {/* Action Footer */}
       <div className="pt-3 border-t border-dark-border flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => onWhy(thread)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1"
+            className="action-quiet"
             title="Why were these tabs grouped?"
           >
-            <HelpCircle className="w-3.5 h-3.5 text-brand-indigo" />
+            <HelpCircle className="w-3.5 h-3.5 text-brand-teal" />
             Why?
           </button>
 
           <button
             onClick={() => onGraph(thread)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1"
+            className="action-quiet"
             title="Inspect Intent Graph"
           >
-            <GitBranch className="w-3.5 h-3.5 text-brand-purple" />
+            <GitBranch className="w-3.5 h-3.5 text-brand-teal" />
             Graph
           </button>
 
           <button
             onClick={() => onTimeline(thread)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1"
+            className="action-quiet"
             title="View chronological timeline"
           >
-            <Clock className="w-3.5 h-3.5 text-brand-cyan" />
+            <Clock className="w-3.5 h-3.5 text-brand-teal" />
             Timeline
           </button>
         </div>
@@ -317,7 +320,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         {/* Hero Resume Task Button */}
         <button
           onClick={() => onResume(thread)}
-          className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-indigo hover:opacity-95 text-slate-950 font-bold text-xs transition shadow-md shadow-brand-cyan/20 flex items-center gap-1.5"
+          className="action-primary"
         >
           <Play className="w-3.5 h-3.5 fill-current" />
           Resume Task
