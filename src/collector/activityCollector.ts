@@ -78,13 +78,21 @@ export class ActivityCollector {
       return null;
     }
 
+    // Chromium can report a URL-shaped placeholder even at load completion.
+    // Use its path, not shared hostname tokens, until a real title arrives.
+    const rawTitle = overrideTitle || tab.title || '';
+    const withoutScheme = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const title = !rawTitle || withoutScheme(rawTitle) === withoutScheme(rawUrl)
+      ? parsed.pathname.replace(/[-_/]+/g, ' ').trim() || parsed.domain
+      : rawTitle;
+
     return {
       id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       tabId: tab.id,
       windowId: tab.windowId,
       openerTabId: tab.openerTabId,
       url: parsed.rawUrl,
-      title: overrideTitle || tab.title || parsed.domain,
+      title,
       domain: parsed.domain,
       pathname: parsed.pathname,
       searchQuery: parsed.searchQuery,
@@ -101,9 +109,13 @@ export class ActivityCollector {
     tab: chrome.tabs.Tab
   ) => {
     // Only capture when title or URL changes and page has finished loading or URL is stable
-    if (!changeInfo.url && !changeInfo.title) {
+    if (!changeInfo.url && !changeInfo.title && changeInfo.status !== 'complete') {
       return;
     }
+
+    // A loading tab may expose its URL as a temporary title. Wait for the
+    // completed document before assigning it permanently to an intent thread.
+    if (tab.status === 'loading') return;
 
     const currentUrl = changeInfo.url || tab.url || '';
     const lastUrl = this.lastCapturedUrlByTab.get(tabId);
@@ -123,7 +135,7 @@ export class ActivityCollector {
   };
 
   private handleTabCreated = (tab: chrome.tabs.Tab) => {
-    if (!tab.url) return;
+    if (!tab.url || tab.status === 'loading') return;
     const event = this.createEvent(tab, 'tab_opened');
     if (event) {
       this.onEventCallback(event);
@@ -133,7 +145,7 @@ export class ActivityCollector {
   private handleTabActivated = async (activeInfo: chrome.tabs.TabActiveInfo) => {
     try {
       const tab = await chrome.tabs.get(activeInfo.tabId);
-      if (!tab || !tab.url) return;
+      if (!tab || !tab.url || tab.status === 'loading') return;
       const event = this.createEvent(tab, 'tab_activated');
       if (event) {
         this.onEventCallback(event);
