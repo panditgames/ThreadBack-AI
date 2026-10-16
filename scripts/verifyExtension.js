@@ -25,4 +25,10 @@ for (const [size, file] of Object.entries(manifest.icons)) {
   assert.equal(png.readUInt32BE(16), Number(size));
   assert.equal(png.readUInt32BE(20), Number(size));
 }
-console.log('PASS: MV3 worker, popup/dashboard/companion bundles, local assets, icon sizes and minimal permissions.');
+const modelFiles = fs.readdirSync(path.join(output, 'assets')).filter(file => /^semanticModel-.*\.json$/.test(file));
+assert.equal(modelFiles.length, 1, 'Exactly one local semantic asset must ship');
+localFile('assets/' + modelFiles[0]);
+const model = JSON.parse(fs.readFileSync(path.join(output, 'assets', modelFiles[0]), 'utf8'));
+assert.equal(model.version, 1);
+assert.ok(Array.isArray(model.concepts) && model.concepts.length > 0);
+console.log('PASS: MV3 worker, popup/dashboard/companion bundles, local semantic model, local assets, icon sizes and minimal permissions.');

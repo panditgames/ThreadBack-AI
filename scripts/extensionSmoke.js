@@ -25,6 +25,25 @@ async function openFixture(url, title) {
   return p;
 }
 const ownerOf = async url => Object.values((await state()).threads).find(t => t.tabs.some(x => x.url === url));
+async function restartWorker(){
+  const marker='audit-'+Date.now();
+  await worker.evaluate(marker=>{globalThis.__threadbackSmokeMarker=marker},marker);
+  const cdp=await ctx.newCDPSession(dash);
+  const versions=[];
+  cdp.on('ServiceWorker.workerVersionUpdated',p=>versions.push(...p.versions));
+  await cdp.send('ServiceWorker.enable');
+  await until(async()=>versions.some(v=>v.scriptURL===worker.url()&&v.runningStatus==='running'));
+  const version=versions.filter(v=>v.scriptURL===worker.url()&&v.runningStatus==='running').at(-1);
+  await cdp.send('ServiceWorker.stopWorker',{versionId:version.versionId});
+  await until(async()=>{
+    await dash.evaluate(()=>chrome.runtime.sendMessage({type:'GET_ALL_THREADS'})).catch(()=>{});
+    for(const candidate of ctx.serviceWorkers()){
+      try{if(await candidate.evaluate(()=>globalThis.__threadbackSmokeMarker)!==marker){worker=candidate;return true}}catch{/* A stopped worker can reject evaluation while its replacement starts. */}
+    }
+    return false;
+  });
+  await cdp.detach();
+}
 const taskCard = async threadId => dash.locator('.task-card').filter({has:dash.getByRole('heading',{name:(await state()).threads[threadId].title,exact:true})});
 async function taskAction(threadId, action) {
   await dash.bringToFront();
@@ -51,23 +70,7 @@ await test('real Google fixtures keep three overlapping searches separate',async
   assert.equal(new Set(searchOwners).size,3);
 });
 await test('actual MV3 worker termination safely recovers saved search evidence',async()=>{
-  const marker='audit-'+Date.now();
-  await worker.evaluate(marker=>{globalThis.__threadbackSmokeMarker=marker},marker);
-  const cdp=await ctx.newCDPSession(dash);
-  const versions=[];
-  cdp.on('ServiceWorker.workerVersionUpdated',p=>versions.push(...p.versions));
-  await cdp.send('ServiceWorker.enable');
-  await until(async()=>versions.some(v=>v.scriptURL===worker.url()&&v.runningStatus==='running'));
-  const version=versions.filter(v=>v.scriptURL===worker.url()&&v.runningStatus==='running').at(-1);
-  await cdp.send('ServiceWorker.stopWorker',{versionId:version.versionId});
-  await until(async()=>{
-    await dash.evaluate(()=>chrome.runtime.sendMessage({type:'GET_ALL_THREADS'})).catch(()=>{});
-    for(const candidate of ctx.serviceWorkers()){
-      try{if(await candidate.evaluate(()=>globalThis.__threadbackSmokeMarker)!==marker){worker=candidate;return true}}catch{/* A stopped worker can reject evaluation while its replacement starts. */}
-    }
-    return false;
-  });
-  await cdp.detach();
+  await restartWorker();
   const result='https://devpost.com/software/eurekadev-audit';
   await openFixture(result,'EurekaDev Hackathon Submission - Devpost');
   assert.equal((await ownerOf(result)).id,searchOwners[0]);
@@ -141,5 +144,41 @@ await test('manual completion, archive and deletion survive later real activity'
 });
 
 await test('fixed-code persistence after browser restart',async()=>{const before=await state();await ctx.close();await launch();const after=await state();assert.deepEqual(Object.keys(after.threads).sort(),Object.keys(before.threads).sort());assert.equal(after.privacy.allowPageContentAnalysis,false);assert.equal(after.threads[completedId].status,'LIKELY_COMPLETE');assert.equal(after.threads[archivedId].status,'ARCHIVED');assert.equal(after.threads[deletedId],undefined);await taskAction(completedId,'Mark Active');await until(async()=>(await state()).threads[completedId].status==='ACTIVE')});
-await test('one final actual-extension smoke',async()=>{await btn(dash,'Demo Data').click();await until(async()=>await dash.locator('.task-card').count()===3);await btn(dash,'Why?').first().click();await dash.getByRole('dialog').waitFor();await dash.keyboard.press('Escape');await dash.screenshot({path:'release/screenshots/dashboard.png'});const popup=await ctx.newPage();await popup.setViewportSize({width:380,height:600});await popup.goto('chrome-extension://'+id+'/popup.html');await btn(popup,'Resume Task Context').waitFor();await popup.screenshot({path:'release/screenshots/popup.png'});await popup.close();await btn(dash,'Privacy Center').click();assert.equal(await dash.getByLabel('Page content analysis (unavailable)').isChecked(),false);await dash.keyboard.press('Escape');assert.deepEqual(errors,[])});
+await test('local semantic asset improves synonym-only grouping and safely falls back',async()=>{
+  const clear=async()=>{await dash.bringToFront();await btn(dash,'Privacy Center').click();await btn(dash,'Erase All ThreadBack Data').click();await btn(dash,'Yes, Erase Everything').click();await until(async()=>Object.keys((await state()).threads).length===0)};
+  await clear();
+  const assets=await fs.readdir(path.join(dist,'assets'));
+  const filename=assets.find(name=>name.startsWith('semanticModel-')&&name.endsWith('.json'));
+  assert.ok(filename,'Model must be bundled locally as a separate asset');
+  const asset=path.join(dist,'assets',filename),original=await fs.readFile(asset);
+  const before=ctx.pages().length;
+  const health=await dash.evaluate(()=>chrome.runtime.sendMessage({type:'GET_ALL_THREADS'}));
+  assert.equal(health.semanticModelStatus,'ready','Local model status: '+health.semanticModelStatus);
+  const first='https://semantic.example/participation';
+  const second='https://video.example/competition';
+  await openFixture(first,'EurekaDev project submission');
+  await openFixture(second,'How to win a hackathon');
+  assert.equal((await ownerOf(first)).id,(await ownerOf(second)).id);
+  try{
+    // Corrupt only the local model asset, restart the real worker, then restore it.
+    await fs.writeFile(asset,'{"version":0}');
+    await restartWorker();
+    assert.notEqual((await dash.evaluate(()=>chrome.runtime.sendMessage({type:'GET_ALL_THREADS'}))).semanticModelStatus,'ready');
+    await clear();
+    const a='https://fallback.example/audio',b='https://fallback-video.example/earbuds';
+    await openFixture(a,'Wireless headset');
+    await openFixture(b,'Headphone comparison');
+    assert.notEqual((await ownerOf(a)).id,(await ownerOf(b)).id);
+    assert.equal(await btn(dash,'Demo Data').isVisible(),true);
+  }finally{await fs.writeFile(asset,original);await restartWorker()}
+  // Model returns after a cold worker start; genuine metadata is still unchanged.
+  assert.equal((await dash.evaluate(()=>chrome.runtime.sendMessage({type:'GET_ALL_THREADS'}))).semanticModelStatus,'ready');
+  await clear();
+  const a='https://restored.example/anc',b='https://restored-video.example/audio';
+  await openFixture(a,'ANC headphones');
+  await openFixture(b,'Active noise cancellation earbuds');
+  assert.equal((await ownerOf(a)).id,(await ownerOf(b)).id);
+  assert.ok(ctx.pages().length>=before);
+});
+await test('one final actual-extension smoke',async()=>{await dash.bringToFront();await btn(dash,'Demo Data').click();await until(async()=>await dash.locator('.task-card').count()===3);await btn(dash,'Why?').first().click();await dash.getByRole('dialog').waitFor();await dash.keyboard.press('Escape');await dash.screenshot({path:'release/screenshots/dashboard.png'});const popup=await ctx.newPage();await popup.setViewportSize({width:380,height:600});await popup.goto('chrome-extension://'+id+'/popup.html');await btn(popup,'Resume Task Context').waitFor();await popup.screenshot({path:'release/screenshots/popup.png'});await popup.close();await dash.bringToFront();await btn(dash,'Privacy Center').click();assert.equal(await dash.getByLabel('Page content analysis (unavailable)').isChecked(),false);await dash.keyboard.press('Escape');assert.deepEqual(errors,[])});
 }catch(e){results.push({name:'runtime',status:'BLOCKED',error:e.stack})}finally{await ctx?.close().catch(()=>{});server.close();await fs.writeFile('release/smoke-results.json',JSON.stringify({results,errors},null,2));assert.ok(profile.startsWith(path.join(os.tmpdir(),'threadback-smoke-')));await fs.rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});console.log('SUMMARY '+JSON.stringify(results));if(results.some(r=>r.status!=='PASS'))process.exitCode=1}

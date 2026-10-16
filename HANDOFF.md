@@ -3,6 +3,24 @@
 EurekaDev 2026 — Coding / Computer Science + AI. Final release verification completed 16 October 2026 (Asia/Calcutta).
 
 
+## v1.1.0 local semantic scorer — 16 October 2026
+
+Added a hand-authored, six-concept English metadata classifier, not a trained embedding or LLM. It supplements only ambiguous, recent heuristic candidates; specific anchor + supporting cue evidence is required on both sides. Unknown/mixed concepts abstain. No dependencies, content scripts, permissions, backend, API keys, telemetry, external model downloads or persistent learned browsing data were added. Manual corrections and local privacy defaults are unchanged.
+
+Model asset: 1,953 bytes. The generated extension increased from 394,546 to 398,383 uncompressed bytes versus the existing v1.0.1 build on this machine: +3,837 bytes including model and integration code. A 2,000-pair warmed microbenchmark measured approximately 0.032 ms per inference and 0.322 ms JSON copying/parsing + normalization initialization. Asset-fetch latency and runtime RAM were NOT measured; timings are host-specific and not an intent-accuracy evaluation. Model initialization has a bounded five-second local fetch deadline, and GET_ALL_THREADS reports its local readiness/status. Failures preserve heuristic operation.
+
+Verification evidence:
+- Targeted first pass: 47 clustering/scoring/model tests passed.
+- One full local regression: 111 tests passed, 0 failed across 16 files; typecheck, lint, build, packaging and release/security scan passed.
+- The first actual Chromium run passed all 10 existing core checks: native popup/dashboard, automatic mixed-task grouping, Resume/reuse/restoration, overlapping searches, real worker termination, cross-domain no-opener context, high-variety separation, unsafe restore rejection, manual states/deletion and browser-restart persistence. The new synonym fixture and closing UI smoke initially failed.
+- The bounded model startup deadline was increased, read-only model status added, and UI automation now explicitly brings the dashboard to the foreground. After these changes, 19 affected model/worker tests, typecheck, lint and production rebuild passed; the regenerated package was verified. The complete final source suite is enforced again in matching GitHub CI.
+- Only the two failed browser checks were repeated on the final build, both PASS: worker status ready; synonym-only grouping; an intentionally invalid local JSON asset causing heuristic-only separation; restored asset + actual worker restart recovering semantic grouping; final Demo Data/Why/popup/privacy UI smoke. Zero console errors were observed in this final run. This is staged verification, not a claim that an unfiltered 12-check run passed on the final build.
+- Browser APIs were real, fixtures synthetic, profile isolated. The temporary invalid asset was restored in finally; its bytes were independently checked against source before packaging. No personal history was used. Installed Chrome/Edge distributions remain independently unqualified.
+
+Artifact: release/ThreadBack-AI-v1.1.0.zip; 17 files verified byte-for-byte against final dist, manifest 1.1.0 at ZIP root. SHA-256: 5e1476b1cd890f922a2705c4c9894db0a6eb052d455de598939e43ddafc3b907. Publish only after the matching main-commit CI passes; preserve v1.0.0 and v1.0.1 releases. The immutable release tag and matching Actions run are the remote verification evidence.
+
+Limitations: six curated English concepts rather than general language understanding; two different tasks in the same concept/session may remain ambiguous. No adaptive training or calibrated semantic probability is claimed. Existing development-toolchain advisories are unchanged; no dependencies were migrated. Browser-local storage is not application-encrypted.
+
 ## v1.0.1 independent audit — 16 October 2026
 
 Reviewed Antigravity's seven-file patch rather than relying on its reported 87 passes. Independent tests reproduced overlapping-search merges, copied/invented query evidence, stale bridge use after erase, weak-word high-variety joins, broad completion matches and rejection of uppercase HTTPS restoration. Real Chromium also exposed browser-assigned opener IDs; opener/shared hosting alone is now insufficient. A separate latency regression reproduced lost captured URLs during overlapping worker storage reads. Worker mutations and saved-state synchronization now run in order.

@@ -1,9 +1,11 @@
+import { localSemanticModel } from './localSemantic';
 import { extractBaseDomain } from './urlParser';
 import { ActivityEvent } from '../types';
 import { extractTitleKeywords, extractQueryKeywords, computeOverlapScore, hasTopicEvidence } from './keywords';
 
 export interface SimilarityResult {
   totalScore: number;
+  semanticSimilarity: number;
   titleSimilarity: number;
   querySimilarity: number;
   domainSimilarity: number;
@@ -184,13 +186,28 @@ export function computeEventSimilarity(
   if ((hasTopicEvidence(topicTokens) || recordingContext) && temporalSimilarity >= 0.5) totalScore = Math.min(1.0, totalScore + 0.20);
   if (!hasTopicEvidence(topicTokens) && !recordingContext && !linkedTopic) totalScore = Math.min(totalScore, 0.35);
 
+  // Only uncertain, recent heuristic matches may use the optional local signal.
+  // Strong decisions are unchanged; model absence/errors always preserve heuristics.
+  let semanticSimilarity = 0;
+  if (totalScore >= 0.18 && totalScore < 0.40 && temporalSimilarity >= 0.7) {
+    try {
+      const semantic = localSemanticModel.compare(eventA, eventB);
+      if (semantic.similarity === 1 && semantic.label) {
+        semanticSimilarity = 1;
+        rationale.push('Local concept match: ' + semantic.label + ' (metadata only)');
+      }
+    } catch { /* Optional model failures must never interrupt collection. */ }
+  }
+
   // A shared domain/window/tab alone is not evidence of a shared task.
-  if (titleSimilarity === 0 && querySimilarity === 0 && openerSimilarity !== 1) totalScore *= 0.5;
+  if (!semanticSimilarity && titleSimilarity === 0 && querySimilarity === 0 && openerSimilarity !== 1) totalScore *= 0.5;
 
   // Penalty if completely disjoint domains with ZERO shared tokens and no opener link
-  if (domainSimilarity === 0 && titleSimilarity === 0 && querySimilarity === 0 && openerSimilarity === 0) {
+  if (!semanticSimilarity && domainSimilarity === 0 && titleSimilarity === 0 && querySimilarity === 0 && openerSimilarity === 0) {
     totalScore = totalScore * 0.15; // steep attenuation
   }
+
+  totalScore = Math.min(1, totalScore + 0.20 * semanticSimilarity);
 
   const allSharedTokens = Array.from(
     new Set([...titleOverlap.sharedTokens, ...sharedQueryTokens])
@@ -198,6 +215,7 @@ export function computeEventSimilarity(
 
   return {
     totalScore: Math.min(1.0, Math.max(0.0, totalScore)),
+    semanticSimilarity,
     titleSimilarity,
     querySimilarity,
     domainSimilarity,

@@ -25,6 +25,9 @@ export function generateWhyExplanation(events: ActivityEvent[], tabs: TabReferen
   if (!points.length) points.push('No captured grouping signals; this thread may have been created manually.');
   const uniqueEvents = [...new Map(events.map(e => [e.url.split('#')[0], e])).values()];
   const scores = uniqueEvents.slice(1).map((event, i) => computeEventSimilarity(uniqueEvents[i], event));
+  for (const score of scores) for (const reason of score.rationale.filter(r => r.startsWith('Local concept match:'))) {
+    if (!points.includes(reason)) points.push(reason);
+  }
   const average = (key: 'temporalSimilarity' | 'domainSimilarity' | 'querySimilarity' | 'titleSimilarity') => scores.length ? scores.reduce((sum, score) => sum + score[key], 0) / scores.length : 0;
   return { sharedKeywords: sharedKeywords.slice(0, 6), primaryDomains: primaryDomains.slice(0, 5), searchQueries, timeSpanMinutes,
     temporalContinuityScore: average('temporalSimilarity'), domainSimilarityScore: average('domainSimilarity'),

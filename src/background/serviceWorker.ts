@@ -1,3 +1,4 @@
+import { localSemanticModel } from '../engine/localSemantic';
 import { ActivityCollector } from '../collector/activityCollector';
 import { createDemoDataset } from '../demo/demoDataset';
 import { IntentEngine } from '../engine/intentClusterer';
@@ -27,6 +28,7 @@ async function initializeOnce() {
   if (isInitialized) return;
 
   try {
+    await localSemanticModel.load();
     const data = await storageManager.load();
     const existingThreads = Object.values(data.threads);
 
@@ -108,7 +110,7 @@ async function handleMessage(message: any): Promise<any> {
   switch (message.type) {
     case 'GET_ALL_THREADS': {
       const threads = intentEngine.getThreads();
-      return { success: true, threads };
+      return { success: true, threads, semanticModelStatus: localSemanticModel.status };
     }
 
     case 'GET_THREAD_BY_ID': {

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "concepts": [
+    {
+      "label": "hackathon participation",
+      "anchors": [
+        "eurekadev",
+        "hackathon",
+        "hackathons",
+        "coding competition"
+      ],
+      "cues": [
+        "project",
+        "submission",
+        "submit",
+        "demo",
+        "win",
+        "winning",
+        "prepare",
+        "pitch",
+        "rules",
+        "entry"
+      ]
+    },
+    {
+      "label": "headphone comparison",
+      "anchors": [
+        "headphones",
+        "headphone",
+        "earbuds",
+        "headset"
+      ],
+      "cues": [
+        "anc",
+        "noise cancelling",
+        "noise canceling",
+        "active noise cancellation",
+        "review",
+        "comparison",
+        "compare",
+        "wireless"
+      ]
+    },
+    {
+      "label": "software recruitment",
+      "anchors": [
+        "internship",
+        "internships",
+        "recruitment",
+        "job application"
+      ],
+      "cues": [
+        "software",
+        "engineering",
+        "apply",
+        "career",
+        "developer",
+        "interview"
+      ]
+    },
+    {
+      "label": "web authentication",
+      "anchors": [
+        "django",
+        "authentication",
+        "oauth"
+      ],
+      "cues": [
+        "login",
+        "authentication",
+        "csrf",
+        "session",
+        "security",
+        "bug"
+      ]
+    },
+    {
+      "label": "orbital mechanics",
+      "anchors": [
+        "astronomy",
+        "orbital",
+        "orbit",
+        "celestial"
+      ],
+      "cues": [
+        "orbit",
+        "orbital",
+        "analysis",
+        "simulation",
+        "kepler",
+        "gravity"
+      ]
+    },
+    {
+      "label": "physics study",
+      "anchors": [
+        "physics",
+        "quantum",
+        "harmonic oscillator"
+      ],
+      "cues": [
+        "assignment",
+        "lecture",
+        "homework",
+        "derivation",
+        "energy",
+        "problem"
+      ]
+    }
+  ]
+}

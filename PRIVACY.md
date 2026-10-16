@@ -14,6 +14,10 @@ Page-content analysis defaults OFF. Extraction is not implemented; the reserved 
 
 The collector excludes internal/extension protocols, non-HTTP(S) pages, incognito tabs, localhost, loopback addresses and .local hosts. Default domain exclusions are bank (substring), paypal.com and accounts.google.com. This is not a complete list of sensitive websites.
 
+## Local semantic model
+
+A tiny curated concept classifier is bundled with the extension. It reads only existing titles and genuinely observed search queries, in memory. Loading the JSON asset accesses the extension's own files, not a server. It collects no page bodies, cookies, forms or extra metadata, persists no embeddings/training examples, and adds no telemetry or permissions. Failure uses existing heuristics. No API key or remote inference is required. Browser-local storage remains unencrypted.
+
 ## AI and network
 
 The experimental provider adapter is not connected to the extension workflow; its UI switch is disabled. If invoked directly by a developer with enabled settings and a key, it sends titles, domains and queries to the selected provider and falls back locally on request errors. Stored keys are not encrypted. No key is required for the product.

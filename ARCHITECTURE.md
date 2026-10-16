@@ -10,6 +10,16 @@ Known-page activation/closure routes to its existing thread. Duplicate event IDs
 
 Milestones, next actions and status are heuristics, not proof of task completion. Explanations count distinct page titles and derive similarity metrics from adjacent unique-page event pairs. They describe retained evidence rather than storing a historical decision trace for every join. Intent Graph is a directed linear milestone chain, displayed as clickable cards with evidence.
 
+## Local semantic intent scorer (v1.1.0)
+
+The original scoring pipeline remains primary. A small hand-authored concept classifier in src/engine/semanticModel.json maps related English metadata phrases to six narrow task concepts. Hashed n-grams alone would add lexical overlap rather than synonym knowledge; this bounded classifier avoids a neural/WASM runtime and new dependencies. It is not a trained embedding, generative model or LLM.
+
+The worker loads the packaged local asset once per lifetime, before collection begins, with a 5-second timeout. Invalid, missing or unreadable assets leave the scorer inactive. No model download, cloud fallback or learned browsing state exists. Each input uses at most 1,024 title characters and 512 authentic query characters; domains are not semantic topic evidence. Alias normalization is performed once at initialization.
+
+Only recent (within 30 minutes), ambiguous heuristic scores in [0.18, 0.40) invoke inference. Each side needs an explicit topic anchor and a separate supporting cue; mixed/unknown concepts abstain. A confident common concept avoids zero-word-overlap attenuation and adds at most 0.20 to the uncertain score. It cannot overcome missing independent context by itself. Strong heuristic decisions are unchanged. Thus the hybrid also rescues some synonym-only candidates which pure lexical penalties previously discarded. This is not a probability calibration or a guarantee that two pages are the same task.
+
+Why? may display the actual matched metadata concept, separately from shared literal keywords. Explanations still describe retained evidence, not a historical decision trace. User merge/split/rename controls are unchanged; no adaptive learning or correction history was added.
+
 ## State and UI
 
 StorageManager validates saved state and writes chrome.storage.local (localStorage in web preview). Corrupt entries are filtered/defaulted. Data is not encrypted. Worker initialization shares one promise. Storage changes synchronize the worker engine/privacy settings with UI edits; popup and companion page listen for saved-state changes. A ten-minute alarm persists state after initialization. An empty timestamp marker prevents delete-all or last-thread deletion from restoring demo data. Fresh storage-instance tests and worker mocks cover state handling; actual bundled Chromium close/relaunch with an isolated persistent profile also passed. Installed Chrome/Edge distributions remain independently unqualified.

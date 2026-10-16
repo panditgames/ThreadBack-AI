@@ -48,6 +48,8 @@ No black boxes. Clicking **"Why?"** on any thread displays transparent mathemati
 - Temporal proximity (e.g. visited within 6 minutes).
 - Opener and navigation chains.
 
+A tiny bundled **local semantic intent scorer** supplements uncertain heuristic matches. Its curated concept/synonym classifier runs offline on titles and genuinely observed queries; no LLM, model download, backend, API key or telemetry is involved. It requires multiple specific cues, abstains on unknown/mixed topics, and falls back to heuristics if its local asset is missing or invalid. It is limited English concept coverage, not general semantic understanding.
+
 ### 3. 🗺️ Structured Intent Graph
 Visualizes your task progression as a Directed Acyclic Graph (DAG) with:
 - **Likely completed milestones** (checkmarks with URL evidence).

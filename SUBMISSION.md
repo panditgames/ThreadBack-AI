@@ -38,7 +38,7 @@ ThreadBack connects a goal, related pages, inspectable evidence and a suggested 
 - **Honest explanations:** Signals come from retained browsing evidence. Visits and inferred milestones are explicitly separated from proven task completion.
 
 ## Testing and evidence
-The v1.0.1 suite contains 96 tests across 15 files. Local verification passed a 94-test full run and the affected reruns including new regressions; GitHub CI verifies the complete final suite. Final typecheck, lint, build, packaging, secret scan and the expanded 11-check real Chromium smoke passed. HANDOFF.md records exact evidence and limitations.
+The v1.1.0 suite contains 111 tests across 16 files. One full local run passed, followed by 19 affected passes after browser-driven startup adjustments. Ten existing actual Chromium core checks passed before those adjustments; both affected model-recovery and final UI/privacy checks passed on the final build. Matching GitHub CI verifies the complete release source; HANDOFF.md records exact staged evidence and limitations. No benchmark is a claim of intent-detection accuracy.
 
 Actual unpacked-extension testing in bundled Chromium used isolated persistent profiles, controlled HTTP pages and real service-worker, tab and storage APIs. It covered automatic collection, three separated scenarios, popup/dashboard, Demo Data, Why, Timeline, Graph, Resume, tab reopening/reuse, archive, merge/split, privacy, deletion, keyboard navigation and browser restart. Installed Google Chrome and Microsoft Edge distributions were not independently qualified. Component and worker tests using mocks are separate coverage.
 
@@ -59,10 +59,14 @@ Broader multilingual evaluation; explicit retention/export controls; independent
 
 ## Links and media
 - Repository: https://github.com/panditgames/ThreadBack-AI
-- Release: verify the v1.0.1 GitHub Release after publication; otherwise use the verified local ZIP listed in HANDOFF.md.
+- Release: verify the v1.1.0 GitHub Release after publication; otherwise use the verified local ZIP listed in HANDOFF.md.
 - Demo video: **[ADD YOUR RECORDED VIDEO URL BEFORE SUBMISSION]**
 - Screenshots: **[ADD UPLOADED SCREENSHOT LINKS]**. Sanitized captures are generated under release/screenshots by the browser smoke.
 - Installation: README.md. Release evidence: HANDOFF.md.
 
 ## Credits and attribution
 Antigravity assisted the original implementation. OpenAI Codex assisted QA, targeted debugging, regression tests, UI refinement, release automation and documentation. Runtime inference is deterministic local logic, not an active remote generative model. React, TypeScript, Vite, Tailwind CSS, Lucide and Vitest retain their upstream licenses. We do not claim every line was handwritten. No project license has been selected; public source availability alone does not grant a software license.
+
+### v1.1.0 local semantic scoring
+
+The heuristic engine now has a tiny on-device concept classifier as an additional, confidence-gated signal. Its hand-authored English synonyms help related titles such as “EurekaDev project submission” and “How to win a hackathon” without requiring exact keyword overlap. Both pages must carry specific metadata evidence; unknown or mixed topics abstain. The classifier ships in the ZIP, needs no backend or API key, and falls back locally if unavailable. It is not an LLM, trained sentence embedding or universal semantic understanding.
