@@ -63,7 +63,7 @@ await test('actual MV3 worker termination safely recovers saved search evidence'
   await until(async()=>{
     await dash.evaluate(()=>chrome.runtime.sendMessage({type:'GET_ALL_THREADS'})).catch(()=>{});
     for(const candidate of ctx.serviceWorkers()){
-      try{if(await candidate.evaluate(()=>globalThis.__threadbackSmokeMarker)!==marker){worker=candidate;return true}}catch{}
+      try{if(await candidate.evaluate(()=>globalThis.__threadbackSmokeMarker)!==marker){worker=candidate;return true}}catch{/* A stopped worker can reject evaluation while its replacement starts. */}
     }
     return false;
   });
