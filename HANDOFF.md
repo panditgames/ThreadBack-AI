@@ -2,7 +2,29 @@
 
 EurekaDev 2026 — Coding / Computer Science + AI. Final release verification completed 16 October 2026 (Asia/Calcutta).
 
-## Release gates
+
+## v1.0.1 independent audit — 16 October 2026
+
+Reviewed Antigravity's seven-file patch rather than relying on its reported 87 passes. Independent tests reproduced overlapping-search merges, copied/invented query evidence, stale bridge use after erase, weak-word high-variety joins, broad completion matches and rejection of uppercase HTTPS restoration. Real Chromium also exposed browser-assigned opener IDs; opener/shared hosting alone is now insufficient. A separate latency regression reproduced lost captured URLs during overlapping worker storage reads. Worker mutations and saved-state synchronization now run in order.
+
+Search sessions are bounded to 32 authentic queries with a 20-minute eligibility window. They rank matches without rewriting observed page queries, exclude missing/archived owners and are not persisted. Worker termination loses only this optional cache; retained genuine search evidence remains available. This is deterministic inference, not semantic understanding or an LLM.
+
+Completion requires bounded receipt paths or explicit completion titles, not guide URLs or milestone counts. LIKELY_COMPLETE survives further activity and storage reconstruction; the user can return it to Active. No automatic deletion was added. Unsafe/non-web schemes are rejected in collection and restoration; normal case-insensitive HTTP(S), query strings and fragments remain eligible.
+
+Local evidence:
+- One complete local run: 94 passed, 0 failed across 15 files.
+- Browser-discovered fixes were followed by 37 affected worker/clustering/scoring passes, including two additional regressions; the current suite therefore contains 96 distinct tests. The complete final source suite is also enforced by GitHub CI.
+- Final typecheck, lint, production rebuild, verifyExtension and releaseScan passed. Only affected tests and necessary failed release gates were repeated.
+- Fresh actual unpacked Chromium smoke: 11/11 PASS. It checked native popup/dashboard, live three-task grouping, overlapping Google queries, no-opener results across Devpost/Unstop/GitHub/YouTube/ChatGPT, high-variety separation, actual service-worker termination, safe restoration/reuse, completion/archive/deletion persistence, browser restart, returning completion to Active and final UI/privacy smoke. Console errors observed: zero.
+- Worker termination was verified by an explicit DevTools stop and disappearance of a temporary global marker, not by assuming a Playwright event proves restart.
+- HTTPS responses were controlled synthetic fixtures; Chrome APIs were real. Fixtures use foreground no-opener tabs to avoid lazy background rendering on this host. Focused reruns are explicitly filtered; only the final unfiltered 11-check result is the release smoke.
+- The initial local benchmark processed 10,000 synthetic events in 5.6 seconds and formed 69 threads. This is not an accuracy evaluation or a comparable performance improvement over earlier releases; matching behavior and host load changed.
+
+release/ThreadBack-AI-v1.0.1.zip has manifest version 1.0.1 at its root and 16 files matching tested dist byte for byte. SHA-256: ec5672269700b9fa8e4c5b7c258a4345810e82d534b8f4657be3840872f0b21c. Its source is committed before normal push; publication waits for the matching CI. Existing v1.0.0 and its asset are preserved. Inspect the matching release-commit Actions run rather than inferring remote CI success from local checks.
+
+Limitations remain: heuristic grouping can be ambiguous; transient search confidence can be lost on suspension; installed Chrome/Edge distributions were not independently qualified; existing development-toolchain advisories remain documented below. No dependencies were upgraded in this audit.
+
+## v1.0.0 release gates (historical)
 
 - Typecheck: PASS (npm run typecheck).
 - Lint: PASS (npm run lint).

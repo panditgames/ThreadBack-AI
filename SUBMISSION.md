@@ -38,11 +38,11 @@ ThreadBack connects a goal, related pages, inspectable evidence and a suggested 
 - **Honest explanations:** Signals come from retained browsing evidence. Visits and inferred milestones are explicitly separated from proven task completion.
 
 ## Testing and evidence
-Final release verification passed 79 tests across 15 files, including the collector regression. Typecheck, lint, production build, extension packaging and the secret scan passed. HANDOFF.md records the command results and separate browser evidence.
+The v1.0.1 suite contains 96 tests across 15 files. Local verification passed a 94-test full run and the affected reruns including new regressions; GitHub CI verifies the complete final suite. Final typecheck, lint, build, packaging, secret scan and the expanded 11-check real Chromium smoke passed. HANDOFF.md records exact evidence and limitations.
 
 Actual unpacked-extension testing in bundled Chromium used isolated persistent profiles, controlled HTTP pages and real service-worker, tab and storage APIs. It covered automatic collection, three separated scenarios, popup/dashboard, Demo Data, Why, Timeline, Graph, Resume, tab reopening/reuse, archive, merge/split, privacy, deletion, keyboard navigation and browser restart. Installed Google Chrome and Microsoft Edge distributions were not independently qualified. Component and worker tests using mocks are separate coverage.
 
-The final 10,000-event engine benchmark completed in 43.2 seconds against a 90-second budget. This is a local throughput measurement, not a browser rendering benchmark or a guarantee on other machines. HANDOFF.md records the final run. Three controlled scenarios are not a population-level clustering accuracy metric.
+The earlier v1.0.0 10,000-event engine benchmark completed in 43.2 seconds against a 90-second budget. This is a local throughput measurement, not a browser rendering benchmark or a guarantee on other machines. HANDOFF.md records the final run. Three controlled scenarios are not a population-level clustering accuracy metric.
 
 ## Privacy and security
 Collected metadata includes URLs/query strings, titles, domains, timestamps and tab relationships. Page bodies, passwords, form inputs, cookies and keystrokes are not collected. Permissions are limited to tabs, storage and alarms; there are no host permissions, history import or content scripts. The product has no telemetry or automatic remote AI upload.
@@ -59,7 +59,7 @@ Broader multilingual evaluation; explicit retention/export controls; independent
 
 ## Links and media
 - Repository: https://github.com/panditgames/ThreadBack-AI
-- Release: verify the v1.0.0 GitHub Release after publication; otherwise use the verified local ZIP listed in HANDOFF.md.
+- Release: verify the v1.0.1 GitHub Release after publication; otherwise use the verified local ZIP listed in HANDOFF.md.
 - Demo video: **[ADD YOUR RECORDED VIDEO URL BEFORE SUBMISSION]**
 - Screenshots: **[ADD UPLOADED SCREENSHOT LINKS]**. Sanitized captures are generated under release/screenshots by the browser smoke.
 - Installation: README.md. Release evidence: HANDOFF.md.

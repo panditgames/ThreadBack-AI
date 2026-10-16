@@ -1,8 +1,8 @@
 import { ActivityEvent, IntentStep, IntentThread, TabReference, ThreadStatus } from '../types';
-import { extractQueryKeywords, extractTitleKeywords } from './keywords';
+import { extractQueryKeywords, extractTitleKeywords, computeOverlapScore, hasTopicEvidence } from './keywords';
 import { inferNextAction } from './nextActionInferer';
 import { computeEventSimilarity } from './scoring';
-import { inferThreadStatus } from './statusInferer';
+import { inferThreadStatus, hasCompletionEvidence } from './statusInferer';
 import { parseUrl } from './urlParser';
 import { generateWhyExplanation } from './whyExplainer';
 
@@ -26,63 +26,78 @@ export function deriveThreadTitle(
     };
   }
 
-  // 1. Check if there's a distinct search query
+  // 1. Scan text and queries
+  const combinedText = events.map(e => `${e.title} ${e.url} ${e.domain}`).join(' ').toLowerCase();
   const searchEvent = events.find(e => e.searchQuery && e.searchQuery.length > 2);
 
-  // 2. Scan titles for high-intent verbs and domains
-  const combinedText = events.map(e => `${e.title} ${e.domain}`).join(' ').toLowerCase();
-
-  // Pattern detection for clear, natural task titles
-  if (combinedText.includes('eurekadev') || (combinedText.includes('hackathon') && combinedText.includes('devpost'))) {
+  // 2. High-confidence specific categories (Strict intent criteria - no single-weak-keyword false triggers)
+  const hasEureka = combinedText.includes('eurekadev');
+  const hasHackathon = combinedText.includes('hackathon');
+  const hasHackathonPlatform = combinedText.includes('devpost') || combinedText.includes('unstop') || combinedText.includes('screenapp');
+  if (hasEureka || (hasHackathon && (hasHackathonPlatform || combinedText.includes('submission') || combinedText.includes('project')))) {
     return {
       title: 'Submit EurekaDev Project',
       summary: 'Hackathon project preparation, demo recording, and submission workflow.',
     };
   }
 
-  if (combinedText.includes('headphone') || combinedText.includes('wh-1000xm') || combinedText.includes('earbuds')) {
+  const hasHeadphones = combinedText.includes('headphone') || combinedText.includes('headphones') || combinedText.includes('wh-1000x') || combinedText.includes('earbuds') || combinedText.includes('airpods');
+  const hasCompare = combinedText.includes('compare') || combinedText.includes('anc') || combinedText.includes('noise cancelling') || combinedText.includes('rtings') || combinedText.includes('review');
+  if (hasHeadphones && hasCompare) {
     return {
       title: 'Compare ANC Headphones',
       summary: 'Evaluating wireless noise-cancelling headphones across reviews and retailers.',
     };
   }
 
-  if (combinedText.includes('physics') || combinedText.includes('quantum') || combinedText.includes('assignment')) {
+  const hasPhysics = combinedText.includes('physics') || combinedText.includes('quantum') || combinedText.includes('doppler');
+  const hasAcademic = combinedText.includes('assignment') || combinedText.includes('homework') || combinedText.includes('problem') || combinedText.includes('hyperphysics') || combinedText.includes('lecture');
+  if (hasPhysics && hasAcademic) {
     return {
       title: 'Physics Assignment Research',
       summary: 'Gathering reference material, lecture notes, and textbook problems.',
     };
   }
 
-  if (combinedText.includes('internship') || combinedText.includes('job') || combinedText.includes('apply')) {
+  // Software Internship: require explicit internship OR job + recruiting context AND NOT hackathon
+  const hasInternship = combinedText.includes('internship') || combinedText.includes('internships');
+  const hasJobRecruiting = combinedText.includes('job') && (combinedText.includes('hiring') || combinedText.includes('careers') || combinedText.includes('vacancy') || combinedText.includes('applicant'));
+  const isNotHackathon = !hasHackathon && !hasEureka && !combinedText.includes('contest') && !combinedText.includes('challenge');
+  if ((hasInternship || hasJobRecruiting) && isNotHackathon) {
     return {
       title: 'Software Internship Applications',
       summary: 'Reviewing job descriptions and submitting developer applications.',
     };
   }
 
-  if (combinedText.includes('flight') || combinedText.includes('hotel') || combinedText.includes('trip') || combinedText.includes('travel')) {
+  const hasTravel = combinedText.includes('flight') || combinedText.includes('airline') || combinedText.includes('hotel') || combinedText.includes('booking.com') || combinedText.includes('airbnb');
+  const hasTrip = combinedText.includes('trip') || combinedText.includes('travel') || combinedText.includes('vacation') || combinedText.includes('itinerary');
+  if (hasTravel && hasTrip) {
     return {
       title: 'Plan Travel Trip',
       summary: 'Comparing travel itineraries, accommodation, and reservations.',
     };
   }
 
-  // If originating from search, craft title from query
+  // 3. If originating from an authentic user search query, use clean title case of the query
   if (searchEvent && searchEvent.searchQuery) {
-    const raw = searchEvent.searchQuery;
-    const capitalized = raw.charAt(0).toUpperCase() + raw.slice(1);
+    const raw = searchEvent.searchQuery.trim();
+    const capitalized = raw
+      .split(/\s+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
     return {
-      title: capitalized.length > 40 ? `${capitalized.slice(0, 37)}...` : capitalized,
-      summary: `Investigating ${raw} and related resources.`,
+      title: capitalized.length > 42 ? `${capitalized.slice(0, 39)}...` : capitalized,
+      summary: `Investigating "${raw}" and related resources.`,
     };
   }
 
-  // Fallback to top keywords from the most prominent page
+  // 4. Grounded fallback to most prominent non-search page title
   const sortedByTime = [...events].sort((a, b) => b.timestamp - a.timestamp);
-  const primaryEvent = sortedByTime[0];
+  const nonSearch = sortedByTime.find(e => !e.domain.includes('google.') && !e.domain.includes('bing.') && !e.domain.includes('duckduckgo.'));
+  const primaryEvent = nonSearch || sortedByTime[0];
   const cleanedTitle = primaryEvent.title
-    .replace(/\s*[-–—|•:]\s*.*$/, '')
+    .replace(/\s*[-–—|•:]\s*(google search|bing search|duckduckgo|github|wikipedia|amazon|youtube|stack overflow|reddit|devpost|unstop|chatgpt|openai).*$/i, '')
     .trim();
 
   return {
@@ -100,7 +115,7 @@ export function deriveMilestoneSteps(
 
   const text = events.map(e => `${e.title} ${e.url} ${e.domain}`).join(' ').toLowerCase();
 
-  if (text.includes('devpost') || text.includes('hackathon') || text.includes('eurekadev')) {
+  if (text.includes('devpost') || text.includes('hackathon') || text.includes('eurekadev') || text.includes('unstop')) {
     // Hackathon milestones
     if (text.includes('rule') || text.includes('schedule') || text.includes('overview') || text.includes('google')) {
       completedSteps.push({
@@ -134,14 +149,14 @@ export function deriveMilestoneSteps(
         title: 'Record demo video',
         status: 'LIKELY_REMAINING',
         confidence: 'Likely',
-        evidence: ['Required for Devpost video submission field'],
+        evidence: ['Required for project video submission field'],
       });
     }
 
-    if (text.includes('confirm') || text.includes('submitted')) {
+    if (events.some(hasCompletionEvidence)) {
       completedSteps.push({
         id: 'hs-4',
-        title: 'Devpost project submission',
+        title: 'Hackathon project submission',
         status: 'COMPLETED',
         confidence: 'Likely',
         evidence: ['Confirmation page detected'],
@@ -149,10 +164,10 @@ export function deriveMilestoneSteps(
     } else {
       unfinishedSteps.push({
         id: 'hs-4u',
-        title: 'Final Devpost submission',
+        title: 'Final hackathon submission',
         status: 'LIKELY_REMAINING',
         confidence: 'Likely',
-        evidence: ['Devpost submission form not yet finalized'],
+        evidence: ['Submission form not yet finalized'],
       });
     }
   } else if (text.includes('headphone') || text.includes('laptop') || text.includes('amazon') || text.includes('compare')) {
@@ -221,9 +236,18 @@ export function deriveMilestoneSteps(
   return { completedSteps, unfinishedSteps };
 }
 
+interface ActiveSearchSession {
+  query: string;
+  queryTokens: string[];
+  tabId?: number;
+  timestamp: number;
+  threadId: string;
+}
+
 export class IntentEngine {
   private threads: Map<string, IntentThread> = new Map();
   private processedCounts = new Map<string, number>();
+  private activeSearchSessions: ActiveSearchSession[] = [];
 
   constructor(initialThreads?: IntentThread[]) {
     if (initialThreads) {
@@ -242,6 +266,7 @@ export class IntentEngine {
   }
 
   public setThreads(threads: IntentThread[]): void {
+    this.activeSearchSessions = this.activeSearchSessions.filter(session => threads.some(t => t.id === session.threadId && t.status !== 'ARCHIVED'));
     this.threads.clear();
     for (const id of this.processedCounts.keys()) {
       if (!threads.some(thread => thread.id === id)) this.processedCounts.delete(id);
@@ -249,6 +274,34 @@ export class IntentEngine {
     for (const t of threads) {
       this.threads.set(t.id, t);
     }
+  }
+
+  private recordSearchSession(event: ActivityEvent, threadId: string): void {
+    // Only an observed query on a search URL can establish context.
+    const query = parseUrl(event.url).searchQuery;
+    if (!query || query !== event.searchQuery) return;
+    const queryTokens = extractQueryKeywords(query);
+    if (!queryTokens.length) return;
+    const cutoff = event.timestamp - 20 * 60 * 1000;
+    this.activeSearchSessions = this.activeSearchSessions.filter(s => s.timestamp >= cutoff && !(s.tabId === event.tabId && s.threadId === threadId && s.query === query));
+    this.activeSearchSessions.unshift({ query, queryTokens, tabId: event.tabId, timestamp: event.timestamp, threadId });
+    this.activeSearchSessions = this.activeSearchSessions.slice(0, 32);
+  }
+
+  private findMatchingSearchSession(event: ActivityEvent, eventTokens: string[]): ActiveSearchSession | undefined {
+    let best: ActiveSearchSession | undefined;
+    let bestScore = 0;
+    for (const session of this.activeSearchSessions) {
+      const age = event.timestamp - session.timestamp;
+      const thread = this.threads.get(session.threadId);
+      if (age < 0 || age > 20 * 60 * 1000 || !thread || thread.status === 'ARCHIVED') continue;
+      if (!thread.events.some(e => e.searchQuery === session.query && e.tabId === session.tabId)) continue;
+      const shared = session.queryTokens.filter(t => eventTokens.includes(t));
+      if (!hasTopicEvidence(shared)) continue;
+      const score = computeOverlapScore(session.queryTokens, eventTokens).score;
+      if (score > bestScore) { best = session; bestScore = score; }
+    }
+    return best;
   }
 
   /**
@@ -264,6 +317,7 @@ export class IntentEngine {
     for (const thread of this.threads.values()) {
       if (thread.events.some(e => e.id === event.id)) return thread;
       if (thread.tabs.some(t => t.url.split('#')[0] === event.url.split('#')[0])) {
+        this.recordSearchSession(event, thread.id);
         return this.addEventToThread(thread, event, thread.confidence);
       }
     }
@@ -275,7 +329,12 @@ export class IntentEngine {
     // Pre-extract tokens once for all comparisons
     const titleTokens = extractTitleKeywords(event.title);
     const queryTokens = extractQueryKeywords(event.searchQuery);
-    const allTokens = [...titleTokens, ...queryTokens];
+    const allTokens = [...new Set([...titleTokens, ...queryTokens])];
+
+    // Check against active search sessions for contextual bridging (e.g. Ctrl+click or Right-click new tab)
+    const recentSearch = !event.searchQuery ? this.findMatchingSearchSession(event, allTokens) : undefined;
+    // Context changes a match score, never the observed event or its searchQuery.
+    const bridgedThread = recentSearch ? this.threads.get(recentSearch.threadId) : undefined;
 
     // Compare with non-archived threads (focus on active/recent or keyword-relevant)
     for (const thread of this.threads.values()) {
@@ -290,9 +349,17 @@ export class IntentEngine {
         continue;
       }
 
-      // Fast check: pairwise with recent events in thread
-      const recentEvents = thread.events.slice(-2);
-      for (const pastEvent of recentEvents) {
+      // Gather candidate events: anchor, search queries, opener parent, and recent events
+      const candidateEvents = new Map<string, ActivityEvent>();
+      if (thread.events[0]) candidateEvents.set(thread.events[0].id, thread.events[0]);
+      for (const se of thread.events.filter(e => e.searchQuery)) candidateEvents.set(se.id, se);
+      if (event.openerTabId) {
+        const parent = thread.events.find(e => e.tabId === event.openerTabId);
+        if (parent) candidateEvents.set(parent.id, parent);
+      }
+      for (const re of thread.events.slice(-4)) candidateEvents.set(re.id, re);
+
+      for (const pastEvent of candidateEvents.values()) {
         const sim = computeEventSimilarity(event, pastEvent);
         if (sim.totalScore > highestScore) {
           highestScore = sim.totalScore;
@@ -300,22 +367,59 @@ export class IntentEngine {
         }
       }
 
-      // Keyword match bonus
-      if (sharedWithThread.length >= 2) {
-        const keywordScore = 0.45 + (sharedWithThread.length * 0.1);
+      // Contextual bridge bonus: if this thread owns the active search session
+      if (bridgedThread && bridgedThread.id === thread.id && isRecent) {
+        const bridgeScore = 0.52 + (sharedWithThread.length * 0.08);
+        if (bridgeScore > highestScore) {
+          highestScore = Math.min(0.95, bridgeScore);
+          bestThread = thread;
+        }
+      }
+
+      // Direct thread title overlap
+      const threadTitleTokens = extractTitleKeywords(thread.title);
+      const titleOverlap = computeOverlapScore(allTokens, threadTitleTokens);
+      const isShortGap = timeDiff <= 30 * 60 * 1000;
+
+      if (hasTopicEvidence(titleOverlap.sharedTokens) && titleOverlap.score >= 0.40 && (isShortGap || sharedWithThread.length >= 2 || titleOverlap.score >= 0.55)) {
+        const titleScore = 0.48 + (titleOverlap.score * 0.35);
+        if (titleScore > highestScore) {
+          highestScore = Math.min(0.95, titleScore);
+          bestThread = thread;
+        }
+      }
+
+      // Distinctive keyword matching:
+      // Require 2+ shared keywords for general multi-hour clustering, or 1 distinctive keyword within immediate session (30 mins)
+      const distinctiveShared = sharedWithThread.filter(t => hasTopicEvidence([t]));
+      if (sharedWithThread.length >= 2 && isRecent) {
+        const keywordScore = 0.45 + (sharedWithThread.length * 0.08);
         if (keywordScore > highestScore) {
-          highestScore = keywordScore;
+          highestScore = Math.min(0.95, keywordScore);
+          bestThread = thread;
+        }
+      } else if (distinctiveShared.length >= 1 && isShortGap) {
+        const singleScore = 0.42 + (distinctiveShared.length * 0.08);
+        if (singleScore > highestScore) {
+          highestScore = Math.min(0.85, singleScore);
           bestThread = thread;
         }
       }
     }
 
     if (bestThread && highestScore >= CLUSTER_THRESHOLD) {
+      if (event.searchQuery) {
+        this.recordSearchSession(event, bestThread.id);
+      }
       // Append event to matched thread
       return this.addEventToThread(bestThread, event, highestScore);
     } else {
       // Create new IntentThread
-      return this.createNewThread(event);
+      const newThread = this.createNewThread(event);
+      if (event.searchQuery && newThread) {
+        this.recordSearchSession(event, newThread.id);
+      }
+      return newThread;
     }
   }
 
@@ -362,14 +466,17 @@ export class IntentEngine {
     ];
     const updatedKeywords = Array.from(new Set([...thread.keywords, ...newKws])).slice(0, 30);
 
-    // Dynamic title only if not already established
-    const titleInfo = (thread.title && thread.title !== 'New Browsing Intent')
-      ? { title: thread.title, summary: thread.summary }
-      : deriveThreadTitle(updatedEvents, undefined);
-
     // Incremental milestone and evidence derivation (recompute periodically or on initial events)
     const processedCount = (this.processedCounts.get(thread.id) ?? thread.events.length) + 1;
     this.processedCounts.set(thread.id, processedCount);
+
+    // Dynamic title: allow generic initial titles to upgrade, while strictly preserving manual corrections
+    const hasManualTitle = thread.isManualCorrection;
+    const isGenericTitle = !thread.title || thread.title === 'New Browsing Intent' || thread.title.startsWith('Research on ');
+    const titleInfo = (hasManualTitle || (!isGenericTitle && processedCount > 3))
+      ? { title: thread.title, summary: thread.summary }
+      : deriveThreadTitle(updatedEvents, hasManualTitle ? thread.title : undefined);
+
     const shouldFullRecompute = processedCount <= 4 || processedCount % 10 === 0 || event.eventType === 'tab_closed';
     const { completedSteps, unfinishedSteps } = shouldFullRecompute
       ? deriveMilestoneSteps(updatedEvents, updatedTabs)

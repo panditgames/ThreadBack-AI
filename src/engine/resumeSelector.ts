@@ -22,7 +22,7 @@ export function selectResumeTabs(tabs: TabReference[]): TabReference[] {
 
   for (const tab of tabs) {
     if (!tab.url || isInternalUrl(tab.url) || !parseUrl(tab.url).isValid) continue;
-    const cleanUrl = tab.url.split('#')[0]; // strip hash for deduplication
+    const cleanUrl = new URL(tab.url).href.split('#')[0]; // strip hash for deduplication
     if (!seenUrls.has(cleanUrl)) {
       seenUrls.add(cleanUrl);
       uniqueTabs.push(tab);
@@ -84,7 +84,10 @@ export async function executeResumeTask(
       // Reopen or focus tabs
       for (let i = 0; i < tabsToResume.length; i++) {
         const targetTab = tabsToResume[i];
-        const cleanTarget = targetTab.url.split('#')[0];
+        if (!parseUrl(targetTab.url).isValid) {
+          continue; // strictly block javascript:, data:, file:, chrome:, edge:, etc.
+        }
+        const cleanTarget = new URL(targetTab.url).href.split('#')[0];
         const existingOpen = openUrlMap.get(cleanTarget);
         const isLastTab = targetTab === primaryTab;
         try {

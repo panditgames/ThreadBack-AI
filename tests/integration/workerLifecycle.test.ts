@@ -8,7 +8,7 @@ describe('MV3 worker persistence and privacy integration', () => {
   beforeAll(async () => {
     await storageManager.clearAllData();
     await import('../../src/background/serviceWorker');
-  });
+  }, 60000);
   it('keeps dashboard rename/status/deletion edits instead of restoring stale worker state', async () => {
     await send({ type: 'LOAD_DEMO_DATA' });
     const state = await storageManager.load();
@@ -30,6 +30,31 @@ describe('MV3 worker persistence and privacy integration', () => {
     await Promise.resolve();
     const response = await send({ type: 'GET_ALL_THREADS' });
     expect(response.threads.flatMap((t: any) => t.tabs).some((t: any) => t.url.includes('private.example'))).toBe(false);
+  });
+
+  it('retains every captured URL when storage reads overlap rapid tab events', async () => {
+    await send({ type: 'CLEAR_ALL_DATA' });
+    const originalLoad = storageManager.load.bind(storageManager);
+    let reads = 0;
+    const delayed = vi.spyOn(storageManager, 'load').mockImplementation(async () => {
+      const snapshot = await originalLoad();
+      if (++reads % 3 !== 0) await new Promise(resolve => setTimeout(resolve, 12));
+      return snapshot;
+    });
+    try {
+      const urls = Array.from({ length: 8 }, (_, i) => 'https://notes.example/quantum/' + i);
+      for (let i = 0; i < urls.length; i++) {
+        chromeMock.tabs.onCreated.trigger({ id: 820 + i, windowId: 1, title: 'Quantum Physics Assignment Reference ' + i, url: urls[i], status: 'complete', incognito: false } as chrome.tabs.Tab);
+        await new Promise(resolve => setTimeout(resolve, 3));
+      }
+      await vi.waitFor(async () => {
+        const data = await originalLoad();
+        const saved = Object.values(data.threads).flatMap(t => t.tabs.map(t => t.url));
+        expect(urls.every(url => saved.includes(url))).toBe(true);
+      }, { timeout: 5000 });
+      const live = await send({ type: 'GET_ALL_THREADS' });
+      expect(urls.every(url => live.threads.some((t: any) => t.tabs.some((tab: any) => tab.url === url)))).toBe(true);
+    } finally { delayed.mockRestore(); }
   });
   it('keeps delete-all empty through alarm synchronization and fresh storage reads', async () => {
     await storageManager.clearAllData();

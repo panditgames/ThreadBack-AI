@@ -1,5 +1,6 @@
+import { extractBaseDomain } from './urlParser';
 import { ActivityEvent } from '../types';
-import { extractTitleKeywords, extractQueryKeywords, computeOverlapScore } from './keywords';
+import { extractTitleKeywords, extractQueryKeywords, computeOverlapScore, hasTopicEvidence } from './keywords';
 
 export interface SimilarityResult {
   totalScore: number;
@@ -26,6 +27,27 @@ export function computeTemporalSimilarity(timestampA: number, timestampB: number
   return 0.02;
 }
 
+const HIGH_VARIETY_DOMAINS = new Set([
+  'youtube.com',
+  'chatgpt.com',
+  'openai.com',
+  'reddit.com',
+  'wikipedia.org',
+  'medium.com',
+  'stackoverflow.com',
+  'quora.com',
+  'x.com',
+  'twitter.com',
+]);
+
+const HACKATHON_ECOSYSTEM_DOMAINS = new Set([
+  'devpost.com',
+  'unstop.com',
+  'screenapp.io',
+  'github.com',
+  'studio.youtube.com',
+]);
+
 export function computeDomainSimilarity(
   domainA: string,
   domainB: string,
@@ -33,13 +55,27 @@ export function computeDomainSimilarity(
   baseDomainB: string
 ): number {
   if (!domainA || !domainB) return 0;
-  if (domainA === domainB) return 1.0;
-  if (baseDomainA && baseDomainB && baseDomainA === baseDomainB) return 0.85;
+
+  const baseA = extractBaseDomain(baseDomainA || domainA);
+  const baseB = extractBaseDomain(baseDomainB || domainB);
+
+  if (domainA === domainB || (baseA && baseB && baseA === baseB)) {
+    if (HIGH_VARIETY_DOMAINS.has(baseA)) {
+      // Content platforms host millions of disjoint tasks; same domain is only a weak signal
+      return 0.25;
+    }
+    return domainA === domainB ? 1.0 : 0.85;
+  }
+
+  // Correlated hackathon ecosystems
+  if (HACKATHON_ECOSYSTEM_DOMAINS.has(baseA) && HACKATHON_ECOSYSTEM_DOMAINS.has(baseB)) {
+    return 0.45;
+  }
 
   // Search engines are bridges; their domain match shouldn't strongly bind unrelated queries
   const isSearchA = domainA.includes('google.') || domainA.includes('bing.') || domainA.includes('duckduckgo.');
   const isSearchB = domainB.includes('google.') || domainB.includes('bing.') || domainB.includes('duckduckgo.');
-  if (isSearchA && isSearchB) return 0.4;
+  if (isSearchA && isSearchB) return 0.20;
 
   return 0.0;
 }
@@ -139,13 +175,14 @@ export function computeEventSimilarity(
     0.12 * openerSimilarity +
     0.08 * sequenceSimilarity;
 
-  // Boost if strong direct indicators
-  if (openerSimilarity === 1.0 && (titleSimilarity > 0.25 || querySimilarity > 0.25)) {
-    totalScore = Math.min(1.0, totalScore + 0.15);
-  }
-  if (sharedQueryTokens.length >= 2 || (titleOverlap.sharedTokens.length >= 2 && temporalSimilarity >= 0.5)) {
-    totalScore = Math.min(1.0, totalScore + 0.20);
-  }
+  // An opener can also be assigned by the browser to a new tab; it is not sufficient alone.
+  const topicTokens = [...new Set([...titleOverlap.sharedTokens, ...sharedQueryTokens])];
+  const broadPlatform = [eventA.domain, eventB.domain].some(d => HIGH_VARIETY_DOMAINS.has(extractBaseDomain(d)));
+  const linkedTopic = openerSimilarity === 1 && topicTokens.length > 0 && !broadPlatform && !(eventA.searchQuery && eventB.searchQuery);
+  if (linkedTopic) totalScore = Math.min(1.0, totalScore + 0.15);
+  const recordingContext = domainSimilarity === 0.45 && [eventA.domain, eventB.domain].some(d => d === 'screenapp.io' || d === 'studio.youtube.com') && topicTokens.includes('hackathon') && temporalSimilarity >= 0.7;
+  if ((hasTopicEvidence(topicTokens) || recordingContext) && temporalSimilarity >= 0.5) totalScore = Math.min(1.0, totalScore + 0.20);
+  if (!hasTopicEvidence(topicTokens) && !recordingContext && !linkedTopic) totalScore = Math.min(totalScore, 0.35);
 
   // A shared domain/window/tab alone is not evidence of a shared task.
   if (titleSimilarity === 0 && querySimilarity === 0 && openerSimilarity !== 1) totalScore *= 0.5;

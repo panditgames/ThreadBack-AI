@@ -1,6 +1,6 @@
 {
   "name": "threadback-ai",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ThreadBack AI - Remembers what you were trying to accomplish across browser tabs.",
   "type": "module",
   "scripts": {

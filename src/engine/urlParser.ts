@@ -36,6 +36,11 @@ const INTERNAL_PROTOCOLS = [
   'moz-extension:',
   'devtools:',
   'view-source:',
+  'javascript:',
+  'data:',
+  'file:',
+  'blob:',
+  'filesystem:',
 ];
 
 export function isInternalUrl(urlStr: string): boolean {
@@ -45,6 +50,10 @@ export function isInternalUrl(urlStr: string): boolean {
     return true;
   }
   if (trimmed === 'about:blank' || trimmed === 'newtab') {
+    return true;
+  }
+  // Safe web URLs must strictly begin with http:// or https://
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
     return true;
   }
   return false;

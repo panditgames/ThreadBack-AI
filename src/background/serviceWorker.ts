@@ -10,6 +10,14 @@ const intentEngine = new IntentEngine();
 let activityCollector: ActivityCollector | null = null;
 let isInitialized = false;
 let initialization: Promise<void> | undefined;
+// Order engine mutations and saved-state synchronization so an older read cannot
+// overwrite a newer captured event while asynchronous storage writes complete.
+let pendingOperation: Promise<unknown> = Promise.resolve();
+function serialize<T>(operation: () => Promise<T>): Promise<T> {
+  const result = pendingOperation.then(operation);
+  pendingOperation = result.then(() => undefined, () => undefined);
+  return result;
+}
 
 function initialize(): Promise<void> {
   return initialization ??= initializeOnce();
@@ -32,7 +40,7 @@ async function initializeOnce() {
     }
 
     // Initialize activity collector
-    activityCollector = new ActivityCollector(handleActivityEvent, data.privacy || DEFAULT_PRIVACY_SETTINGS);
+    activityCollector = new ActivityCollector(event => { void serialize(() => handleActivityEvent(event)); }, data.privacy || DEFAULT_PRIVACY_SETTINGS);
     activityCollector.startListening();
 
     isInitialized = true;
@@ -77,14 +85,16 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.alarms.create('threadback_sync', { periodInMinutes: 10 });
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'threadback_sync') {
-    await initialize();
-    await storageManager.saveThreads(intentEngine.getThreads());
+    await serialize(async () => {
+      await initialize();
+      await storageManager.saveThreads(intentEngine.getThreads());
+    });
   }
 });
 
 // Message Bus for UI components (Popup, Dashboard, Side Panel)
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  handleMessage(message).then(sendResponse).catch(err => {
+  serialize(() => handleMessage(message)).then(sendResponse).catch(err => {
     sendResponse({ success: false, error: err.message });
   });
   return true; // async sendResponse
@@ -230,10 +240,12 @@ async function handleMessage(message: any): Promise<any> {
 // Views persist edits directly; keep the live collector and engine in sync.
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local' || !changes[STORAGE_KEY]) return;
-  const data = await storageManager.load();
-  intentEngine.setThreads(Object.values(data.threads));
-  activityCollector?.updatePrivacySettings(data.privacy);
-  chrome.runtime.sendMessage({ type: 'THREADS_UPDATED', threads: intentEngine.getThreads() }).catch(() => {});
+  void serialize(async () => {
+    const data = await storageManager.load();
+    intentEngine.setThreads(Object.values(data.threads));
+    activityCollector?.updatePrivacySettings(data.privacy);
+    chrome.runtime.sendMessage({ type: 'THREADS_UPDATED', threads: intentEngine.getThreads() }).catch(() => {});
+  }).catch(err => console.error('[ThreadBack] State synchronization failed:', err));
 });
 
 // Initial self-boot

@@ -23,7 +23,11 @@ const STOPWORDS = new Set([
   // Common generic web filler
   'com', 'http', 'https', 'www', 'html', 'page', 'site', 'website', 'official', 'view', 'online', 'free', 'best', 'top',
   'login', 'sign', 'signin', 'signup', 'home', 'portal', 'account', 'tab', 'new', 'dashboard',
-  'browsing', 'task', 'item', 'details', 'info', 'overview'
+  'browsing', 'task', 'item', 'details', 'info', 'overview',
+  // Generic action and platform filler words (prevent false clustering on generic words)
+  'apply', 'application', 'applications', 'guide', 'tutorial', 'video', 'videos', 'watch', 'channel', 'playlist',
+  'chat', 'conversation', 'check', 'start', 'get', 'find', 'read', 'use', 'part', 'episode', 'lecture',
+  'notes', 'help', 'tips', 'issue', 'fix', 'problem', 'search', 'results'
 ]);
 
 export function cleanText(input: string): string {
@@ -47,9 +51,9 @@ export function extractTokens(text: string): string[] {
 
 export function extractTitleKeywords(title: string): string[] {
   if (!title) return [];
-  // Strip common trailing suffixes like " - Google Search", " | GitHub", " — Wikipedia"
+  // Strip common trailing suffixes like " - Google Search", " | GitHub", " — Wikipedia", " | Unstop", " - ChatGPT"
   const stripped = title
-    .replace(/\s*[-–—|•:]\s*(google search|github|wikipedia|amazon|youtube|stack overflow|reddit).*$/i, '')
+    .replace(/\s*[-–—|•:]\s*(google search|bing search|duckduckgo|github|wikipedia|amazon|youtube|stack overflow|reddit|devpost|unstop|chatgpt|openai).*$/i, '')
     .trim();
 
   return extractTokens(stripped);
@@ -101,4 +105,9 @@ export function computeOverlapScore(arrA: string[], arrB: string[]): {
     score: Math.min(1.0, Math.max(0.0, combined)),
     sharedTokens: shared,
   };
+}
+
+// One broad subject word (for example software or Python) is not task evidence.
+export function hasTopicEvidence(tokens: string[]): boolean {
+  return new Set(tokens).size >= 2 || tokens.some(t => t === 'eurekadev' || (t.length >= 5 && /\d/.test(t)));
 }

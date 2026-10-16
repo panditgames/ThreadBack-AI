@@ -4,7 +4,7 @@
 
 Manifest V3 loads src/background/serviceWorker.ts. The ActivityCollector observes tab creation, URL/title updates, activation and removal. It filters internal, local, excluded and incognito pages. Loading documents are deferred; URL-shaped placeholder titles use path words rather than shared hostnames, preserving the actual URL while avoiding premature cross-task joins. History import and page-body extraction are not implemented.
 
-IntentEngine incrementally compares each event against the last two events and retained keywords of non-archived threads. The join threshold is 0.40. Similarity combines title (0.28), query (0.22), domain (0.15), time (0.15), opener (0.12) and sequence (0.08) signals, with explicit boosts and disjoint-topic penalties. Timing uses discrete bands rather than exponential decay. Events are capped at 100 and tabs at 50 per incrementally updated thread; merge retains up to 150 events.
+IntentEngine incrementally compares each event against anchor/search/opener/recent events and retained keywords of non-archived threads. The join threshold is 0.40. Similarity combines title (0.28), query (0.22), domain (0.15), time (0.15), opener (0.12) and sequence (0.08) signals, with explicit boosts and disjoint-topic penalties. Timing uses discrete bands rather than exponential decay. Events are capped at 100 and tabs at 50 per incrementally updated thread; merge retains up to 150 events.
 
 Known-page activation/closure routes to its existing thread. Duplicate event IDs are ignored. Generic titles remain ambiguous; manual rename/merge/split/status controls correct inference. Splits recompute both sides from retained evidence.
 
@@ -25,3 +25,9 @@ The AIProviderService adapter is experimental, not invoked by the UI/worker. Its
 ## Verification
 
 Vitest covers engine logic, storage, worker lifecycle mocks, security checks, React interactions and a 10,000-event benchmark. See TESTING.md and HANDOFF.md for actual results and practical browser coverage.
+
+## Search context and completion hardening
+
+A bounded in-memory buffer holds at most 32 authentic search sessions for 20 minutes. It ranks matching destinations using multiple distinct topic tokens (or a distinctive project/model identifier), never copies an inferred query into page evidence, ignores erased/archived owners, and does not persist extra context. Worker restart drops this optional buffer; retained genuine search events remain comparison anchors. Ambiguous destinations may lose confidence rather than being forcibly joined. Timing or platform domain alone cannot establish intent.
+
+High-variety platforms have weaker domain signals. Generic action/platform words are filtered; direct opener evidence still supports related pages. Completion requires bounded receipt paths or explicit completion titles, not guide URLs or counts of inferred milestones. An explicit completed status stays until manually changed; completion never deletes a thread.
