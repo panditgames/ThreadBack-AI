@@ -2,7 +2,7 @@
 
 ## Runtime
 
-Manifest V3 loads src/background/serviceWorker.ts. The ActivityCollector observes tab creation, URL/title updates, activation and removal. It filters internal, local, excluded and incognito pages. History import and page-body extraction are not implemented.
+Manifest V3 loads src/background/serviceWorker.ts. The ActivityCollector observes tab creation, URL/title updates, activation and removal. It filters internal, local, excluded and incognito pages. Loading documents are deferred; URL-shaped placeholder titles use path words rather than shared hostnames, preserving the actual URL while avoiding premature cross-task joins. History import and page-body extraction are not implemented.
 
 IntentEngine incrementally compares each event against the last two events and retained keywords of non-archived threads. The join threshold is 0.40. Similarity combines title (0.28), query (0.22), domain (0.15), time (0.15), opener (0.12) and sequence (0.08) signals, with explicit boosts and disjoint-topic penalties. Timing uses discrete bands rather than exponential decay. Events are capped at 100 and tabs at 50 per incrementally updated thread; merge retains up to 150 events.
 
@@ -12,7 +12,7 @@ Milestones, next actions and status are heuristics, not proof of task completion
 
 ## State and UI
 
-StorageManager validates saved state and writes chrome.storage.local (localStorage in web preview). Corrupt entries are filtered/defaulted. Data is not encrypted. Worker initialization shares one promise. Storage changes synchronize the worker engine/privacy settings with UI edits; popup and companion page listen for saved-state changes. A ten-minute alarm persists state after initialization. An empty timestamp marker prevents delete-all or last-thread deletion from restoring demo data. Browser restart is covered through fresh storage-instance tests and worker mocks; actual native restart requires manual verification.
+StorageManager validates saved state and writes chrome.storage.local (localStorage in web preview). Corrupt entries are filtered/defaulted. Data is not encrypted. Worker initialization shares one promise. Storage changes synchronize the worker engine/privacy settings with UI edits; popup and companion page listen for saved-state changes. A ten-minute alarm persists state after initialization. An empty timestamp marker prevents delete-all or last-thread deletion from restoring demo data. Fresh storage-instance tests and worker mocks cover state handling; actual bundled Chromium close/relaunch with an isolated persistent profile also passed. Installed Chrome/Edge distributions remain independently unqualified.
 
 Dashboard provides cards, substring search, timeline, explanation, graph, recovery banner, resume and manual controls. Popup provides quick resume/status and dashboard access. A sidepanel HTML page exists but is not registered in the browser manifest. Resume queries current tabs, reuses matching URLs, reopens missing HTTP(S) pages in saved order, and focuses the suggested next-action URL or most recently accessed page. Individual tab errors do not block remaining restoration.
 

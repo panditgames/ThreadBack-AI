@@ -10,12 +10,13 @@ const patterns = {
 const findings = [];
 for (const file of files) {
   if (!fs.existsSync(file)) continue;
-  if (/^(?:node_modules|dist|coverage|test-results|playwright-report)\//.test(file)) {
+  if (/^(?:node_modules|dist|coverage|test-results|playwright-report|release)\//.test(file)) {
     if (execFileSync('git', ['ls-files', '--', file], { encoding: 'utf8' }).trim()) findings.push({ file, kind: 'tracked build/runtime artifact' });
     continue;
   }
   if (/(^|\/)(?:\.env(?:\..*)?|.*\.(?:db|sqlite|pem|key)|.*profile.*)$/i.test(file)) findings.push({ file, kind: 'sensitive artifact filename' });
-  if (!/\.(?:md|tsx?|js|json|html|css)$/.test(file)) continue;
+  if (/^\.qa-|(?:^|\/).*\.(?:log|har|zip)$/i.test(file)) findings.push({ file, kind: 'tracked runtime/release artifact' });
+  if (!/\.(?:md|tsx?|m?js|json|html|css|ya?ml|sh|txt)$/.test(file)) continue;
   const content = fs.readFileSync(file, 'utf8');
   for (const [kind, pattern] of Object.entries(patterns)) if (pattern.test(content)) findings.push({ file, kind });
 }

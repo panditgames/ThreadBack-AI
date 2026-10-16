@@ -5,7 +5,7 @@
 🏆 **Hackathon**: EurekaDev 2026  
 🎯 **Track**: Coding → Computer Science + AI  
 🧩 **Platform**: Google Chrome & Microsoft Edge Extension (Manifest V3)  
-🛡️ **Privacy Architecture**: 100% Local-First by default • Zero telemetry • No external backend required • AI is completely optional  
+🛡️ **Privacy Architecture**: 100% Local-First by default • Zero telemetry • No external backend required • Deterministic local inference
 
 ---
 
@@ -19,9 +19,9 @@ Every developer, researcher, and knowledge worker suffers from **Tab Overload** 
 **ThreadBack AI** solves this problem by observing non-invasive browser activity metadata (titles, domains, timestamps, search queries) and reconstructing high-level **Intent Threads**. It automatically deduces:
 1. **What you were trying to achieve** (e.g., *"Submit EurekaDev Project"*).
 2. **Which tabs belong to that specific task**.
-3. **What milestones were already accomplished** (backed by concrete browsing evidence).
+3. **Which milestones may be completed** (inferred from evidence, not proof of completion).
 4. **Where you stopped and what likely remains unfinished**.
-5. **The exact next action** to regain flow.
+5. **A suggested next action** to regain flow.
 
 With one click on **"Resume Task"**, ThreadBack AI reopens closed tabs, focuses active tabs in logical order, and displays a concise briefing so you immediately regain flow.
 
@@ -37,21 +37,21 @@ Restores your cognitive state in seconds. ThreadBack:
 - Generates a **Resume Briefing** with:
   - *You were working on:* High-level task objective.
   - *Last observed action:* Exactly where you paused.
-  - *Likely completed milestones:* Verified by visited evidence.
+  - *Likely completed milestones:* Inferred from visited evidence.
   - *Likely remaining steps & Suggested next action:* Derived with honest probabilistic qualifiers (*Likely*, *Possibly*).
 
 ### 2. 🧮 Explainable "Why Was This Grouped?"
 No black boxes. Clicking **"Why?"** on any thread displays transparent mathematical clustering factors:
 - Exact keyword overlap between page titles.
-- Shared domain relationships (e.g. `devpost.com` ↔ `github.com`).
+- Repeated domains, combined with cross-domain title/query overlap.
 - Search query alignment (e.g. *"eureka devpost demo video"*).
 - Temporal proximity (e.g. visited within 6 minutes).
 - Opener and navigation chains.
 
 ### 3. 🗺️ Structured Intent Graph
 Visualizes your task progression as a Directed Acyclic Graph (DAG) with:
-- **Completed milestones** (marked with checkmarks and concrete URL evidence).
-- **In-progress milestones** (highlighted with active pulse).
+- **Likely completed milestones** (checkmarks with URL evidence).
+- **In-progress milestones** (highlighted with teal accents).
 - **Pending/Inferred next milestones**.
 
 ### 4. ⏸️ Interruption Recovery & Inactivity Detection
@@ -97,7 +97,7 @@ ThreadBack AI is structured into 8 modular layers:
 ```
 ┌────────────────────────────────────────────────────────┐
 │                   Extension UI Layer                   │
-│   Popup (Quick Bar) • Full Dashboard • Side Panel       │
+│   Popup • Full Dashboard • Companion HTML Page       │
 │   Modals: Resume Briefing, Why?, Graph, Timeline, Privacy │
 └───────────────────────────▲────────────────────────────┘
                             │
@@ -138,7 +138,7 @@ ThreadBack AI is structured into 8 modular layers:
 ### 1. Build the Extension
 ```bash
 # Install dependencies
-npm install
+npm ci
 
 # Run the comprehensive test suite (including release regressions)
 npm test
@@ -170,7 +170,7 @@ npx vitest run
 ```
 
 ### Test Coverage Highlights:
-- **Unit Tests**: Title tokenization, query extraction, multi-signal scoring weights, temporal decay, and domain normalization.
+- **Unit Tests**: Title tokenization, query extraction, multi-signal scoring weights, temporal proximity bands, and domain normalization.
 - **Adversarial & Edge Cases**: Empty tab sessions, rapid burst of 200 concurrent events, malformed URLs, and storage corruption resilience.
 - **Large-scale benchmark**: Includes 10,000 events with a 90-second engine processing budget. Browser rendering performance is separate.
 - **Security/privacy audit**: Checks secrets, minimal permissions (tabs, storage, alarms), and privacy defaults.
@@ -200,3 +200,13 @@ Open Dashboard and click **Demo Data**, then inspect the three synthetic cards u
 URLs and titles can contain personal data. Domain exclusions apply to future events; clear existing data separately. Browser storage is not application-encrypted. Search uses substring matching.
 
 AI assistance disclosure: Antigravity generated the initial implementation. OpenAI Codex assisted final QA, targeted debugging, regression tests and documentation corrections. Runtime intent inference uses deterministic local heuristics.
+
+## Release and troubleshooting
+
+See [SUBMISSION.md](SUBMISSION.md), [SUBMISSION_CHECKLIST.md](SUBMISSION_CHECKLIST.md), [DEMO_SCRIPT.md](DEMO_SCRIPT.md) and [HANDOFF.md](HANDOFF.md). Use Node.js 22 LTS, npm ci and npm run build; node scripts/verifyExtension.js checks packaging. CI runs the seven documented verification commands on pushes and pull requests.
+
+Bundled Chromium unpacked-extension testing passed with real browser APIs, controlled pages and an isolated persistent profile. Vitest also uses mocked APIs; those are separate evidence. Installed Chrome/Edge distributions have not been independently qualified. No native side panel is registered.
+
+If Load unpacked fails, select the folder containing manifest.json (built dist, not source). After rebuilding, click Reload on the extension card and reopen popup/dashboard. Open Dashboard from the popup or Details → Extension options. If cards are empty, use Demo Data in a separate test profile; it replaces threads. Resume may open external login pages. Excluded/local/internal pages are intentionally not tracked. Inspect service-worker errors from the extension card without sharing personal URLs or keys.
+
+For a release ZIP, extract it first and Load unpacked the extracted folder containing manifest.json. A development server and API key are unnecessary. Local storage is not application-encrypted.
