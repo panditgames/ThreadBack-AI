@@ -1,7 +1,26 @@
 # ThreadBack AI release handoff
 
-EurekaDev 2026 — Coding / Computer Science + AI. Final release verification completed 16 October 2026 (Asia/Calcutta).
+EurekaDev 2026 — Coding / Computer Science + AI. Final release verification completed 17 October 2026 (Asia/Calcutta).
 
+
+## v1.1.1 TinySemanticClassifier independent audit — 17 October 2026
+
+Antigravity's local resolver was retained. Independent tests reproduced seven initial defects: generic/domain/subword false joins, a returned error result overriding a valid heuristic join, unobserved query contamination and malformed-input exceptions. A further adversarial case exposed GSoC versus extension-project merging in an overbroad software concept. The concept was narrowed; no alternate AI runtime, model download, dependency, permission or UI redesign was introduced.
+
+Valid resolved local decisions affect only stage-one scores in [0.25,0.50), require finite confidence >=0.65, and otherwise preserve the original heuristic decision. Inputs are bounded observed titles and authentic queries. Hosting domains, generic terms and generated keyword lists cannot authorize semantic joins; word boundaries and multiple distinctive features prevent fragment-only matches. Known-page routing, strong stage-one decisions, completion, archive/delete and persistence remain unchanged. Confidence is a heuristic score, not a calibrated probability.
+
+Evidence:
+- The reported initial 47/50 development result reproduced. It was not an independent accuracy study: vocabulary overlaps rules and ambiguous labels are hand assigned. Two generic recorder/upload cases were relabeled to require separation when task evidence is absent. The final curated set is 23 positive / 27 negative cases: 49/50 expected decisions, zero false joins in those 27 negatives, one false split. These results are not directly comparable with the original labels and do not establish general accuracy or production-band accuracy.
+- One full local run passed 144 tests across 19 files. After the last category counterexample, 34 affected tests passed, including that additional regression; the final suite contains 145 tests. Matching GitHub CI enforces the complete final source suite.
+- Typecheck, lint, build and extension verification passed after fixing one unused test import. Final releaseScan findings: zero. Dependency versions and permissions are unchanged.
+- Actual unpacked bundled Chromium: all 13 candidate checks passed, including native popup/dashboard, automatic grouping, cross-domain/no-opener capture, high-variety separation, actual worker stop, Resume reuse/reopen, unsafe URL rejection, completion/archive/delete and restart persistence. The travel fixture's below-threshold stage-one score and real resolver invocation are independently established in the integration test.
+- After narrowing the last software category, only the affected actual resolver check (now including GSoC versus extension-project separation) and final UI/privacy smoke were repeated on the final build: both PASS, zero observed console errors. This is staged evidence, not an unfiltered final-build 13-check claim. Profiles were isolated, fixture pages synthetic, browser APIs real.
+
+The final extension totals 403,488 uncompressed bytes: +5,105 versus the verified v1.1.0 build. Repeated fixed-example warm classifier inference averaged 0.258 ms on this host in the last targeted run (0.378 ms during the full run). Exact RAM and cold initialization were not independently measured; the reported 45 KB RAM figure is not a verified release claim. No alternative model feasibility assertions were retained as tests.
+
+Artifact: release/ThreadBack-AI-v1.1.1.zip, 123,881 bytes, 17 files matching tested dist byte-for-byte, manifest at ZIP root. SHA-256: 2117886ddf258538d9a944c0417a0f60d4006c8973be319013dd46d25a28addb. The remote v1.1.0 tag already points to 289ac016c428dba6aef53c62b85703d92a908b3b; this audit therefore uses v1.1.1 to preserve that release and all earlier tags. Publication requires matching green CI and a verified new tag/asset.
+
+Limits: curated English concepts and generic heuristics can still confuse different tasks within a topic; manual correction remains available. Installed Chrome/Edge distributions are independently unqualified. Existing development-toolchain advisories remain; browser-local storage is not application-encrypted.
 
 ## v1.1.0 local semantic scorer — 16 October 2026
 

@@ -1,4 +1,4 @@
-const STOPWORDS = new Set([
+export const STOPWORDS = new Set([
   'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren\'t', 'as', 'at',
   'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
   'can', 'can\'t', 'cannot', 'could', 'couldn\'t',

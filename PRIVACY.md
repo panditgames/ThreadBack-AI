@@ -27,3 +27,5 @@ Resume Task opens selected task URLs, making normal browser requests to those si
 ## Permissions
 
 Only tabs, storage and alarms are requested. History import, content injection and host permissions are absent. Tests cover defaults, deletion, exclusions, unsafe URLs, denied tab access and offline AI fallback. See HANDOFF.md for actual release results and browser limitations.
+
+TinySemanticClassifier is a second-stage, deterministic metadata resolver. It adds no network requests, backend, API key, telemetry, browser permissions, content extraction or persistent training examples. Domain strings cannot establish its semantic topic, and query context must match an observed search URL. Malformed input or classifier errors preserve the heuristic decision.

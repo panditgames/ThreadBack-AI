@@ -5,6 +5,7 @@ import { computeEventSimilarity } from './scoring';
 import { inferThreadStatus, hasCompletionEvidence } from './statusInferer';
 import { parseUrl } from './urlParser';
 import { generateWhyExplanation } from './whyExplainer';
+import { resolveIntentAmbiguity } from './localIntentClassifier';
 
 const CLUSTER_THRESHOLD = 0.40;
 
@@ -404,6 +405,25 @@ export class IntentEngine {
           highestScore = Math.min(0.85, singleScore);
           bestThread = thread;
         }
+      }
+    }
+
+    // Second-Stage Ambiguity Resolver (Middle-confidence band: 0.25 <= score < 0.50)
+    // Clear high confidence (>= 0.50): join directly
+    // Clear low confidence (< 0.25): create separate thread directly
+    // Ambiguity band (0.25 <= score < 0.50): consult second-stage classifier
+    if (bestThread && highestScore >= 0.25 && highestScore < 0.50) {
+      try {
+        const ambiguityResult = resolveIntentAmbiguity(event, bestThread);
+        if (ambiguityResult.source === 'tiny_semantic' && ambiguityResult.ambiguityResolved && Number.isFinite(ambiguityResult.confidence) && ambiguityResult.confidence >= 0.65 && ambiguityResult.decision === 'RELATED') {
+          // Promote match score to cleanly join the candidate thread
+          highestScore = Math.max(highestScore, 0.52);
+        } else if (ambiguityResult.source === 'tiny_semantic' && ambiguityResult.ambiguityResolved && Number.isFinite(ambiguityResult.confidence) && ambiguityResult.confidence >= 0.65 && ambiguityResult.decision === 'UNRELATED') {
+          // Explicit false-positive separation: suppress match score below threshold
+          highestScore = Math.min(highestScore, 0.30);
+        }
+      } catch {
+        // Fallback: preserve original heuristic highestScore
       }
     }
 

@@ -38,7 +38,7 @@ ThreadBack connects a goal, related pages, inspectable evidence and a suggested 
 - **Honest explanations:** Signals come from retained browsing evidence. Visits and inferred milestones are explicitly separated from proven task completion.
 
 ## Testing and evidence
-The v1.1.0 suite contains 111 tests across 16 files. One full local run passed, followed by 19 affected passes after browser-driven startup adjustments. Ten existing actual Chromium core checks passed before those adjustments; both affected model-recovery and final UI/privacy checks passed on the final build. Matching GitHub CI verifies the complete release source; HANDOFF.md records exact staged evidence and limitations. No benchmark is a claim of intent-detection accuracy.
+The v1.1.1 suite contains 145 tests across 19 files. Local evidence comprises a 144-test full run and 34 affected passes after a final category correction. All 13 actual Chromium candidate checks passed; the affected resolver path and final UI/privacy smoke passed again on the final build. Matching GitHub CI verifies the complete release source. HANDOFF.md records exact staged evidence; the 50-case classifier benchmark is a curated development set, not general accuracy evidence.
 
 Actual unpacked-extension testing in bundled Chromium used isolated persistent profiles, controlled HTTP pages and real service-worker, tab and storage APIs. It covered automatic collection, three separated scenarios, popup/dashboard, Demo Data, Why, Timeline, Graph, Resume, tab reopening/reuse, archive, merge/split, privacy, deletion, keyboard navigation and browser restart. Installed Google Chrome and Microsoft Edge distributions were not independently qualified. Component and worker tests using mocks are separate coverage.
 
@@ -59,7 +59,7 @@ Broader multilingual evaluation; explicit retention/export controls; independent
 
 ## Links and media
 - Repository: https://github.com/panditgames/ThreadBack-AI
-- Release: verify the v1.1.0 GitHub Release after publication; otherwise use the verified local ZIP listed in HANDOFF.md.
+- Release: verify the v1.1.1 GitHub Release after publication; otherwise use the verified local ZIP listed in HANDOFF.md.
 - Demo video: **[ADD YOUR RECORDED VIDEO URL BEFORE SUBMISSION]**
 - Screenshots: **[ADD UPLOADED SCREENSHOT LINKS]**. Sanitized captures are generated under release/screenshots by the browser smoke.
 - Installation: README.md. Release evidence: HANDOFF.md.
@@ -70,3 +70,7 @@ Antigravity assisted the original implementation. OpenAI Codex assisted QA, targ
 ### v1.1.0 local semantic scoring
 
 The heuristic engine now has a tiny on-device concept classifier as an additional, confidence-gated signal. Its hand-authored English synonyms help related titles such as “EurekaDev project submission” and “How to win a hackathon” without requiring exact keyword overlap. Both pages must carry specific metadata evidence; unknown or mixed topics abstain. The classifier ships in the ZIP, needs no backend or API key, and falls back locally if unavailable. It is not an LLM, trained sentence embedding or universal semantic understanding.
+
+### Audited TinySemanticClassifier resolver
+
+Middle-confidence matches now have a synchronous, offline second-stage resolver using bounded metadata concepts and weighted word/subword features. Hosting domains and generic terms cannot authorize a semantic join; valid decisions require a confidence score of at least 0.65, and failures retain the heuristic result. It needs no extra model fetch, key, backend, telemetry or permissions. It supplements the released local pipeline rather than replacing it. Neither component is an LLM, and confidence scores are not calibrated probabilities.

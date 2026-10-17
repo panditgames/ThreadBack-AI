@@ -106,6 +106,19 @@ await test('unrelated YouTube and ChatGPT topics sharing Python remain separate'
   assert.notEqual(ids[2],ids[3]);
   assert.ok(ids.every(id=>!searchOwners.includes(id)));
 });
+await test('TinySemanticClassifier resolves real ambiguous travel metadata and rejects coding',async()=>{
+  const a='https://stay.example/reservation',b='https://metro.example/routes',c='https://code.example/oauth';
+  await openFixture(a,'Tokyo hotel reservation');
+  await openFixture(b,'Tokyo subway route map');
+  assert.equal((await ownerOf(a)).id,(await ownerOf(b)).id,'Below-threshold travel metadata requires the second-stage resolver');
+  await openFixture(c,'Django OAuth authentication');
+  assert.notEqual((await ownerOf(a)).id,(await ownerOf(c)).id);
+  assert.ok((await ownerOf(a)).events.filter(e=>[a,b].includes(e.url)).every(e=>!e.searchQuery));
+  const d='https://opensource.example/proposals',e='https://extension.example/project';
+  await openFixture(d,'GSoC organization project proposals');
+  await openFixture(e,'Chrome extension project Manifest V3');
+  assert.notEqual((await ownerOf(d)).id,(await ownerOf(e)).id,'Different software intents must not merge via a broad category');
+});
 await test('real worker Resume rejects stored dangerous URI fixtures',async()=>{
   const threadId=searchOwners[0];
   const unsafe=['javascript:alert(1)','data:text/html,unsafe','file:///tmp/unsafe','blob:https://example.com/id','filesystem:https://example.com/temporary/x','chrome://settings','edge://settings','about:blank','malformed URL'];

@@ -3,7 +3,7 @@
 ## Release
 - [ ] Confirm main and the release SHA match the final report; inspect GitHub CI if it was pending.
 - [ ] Check final typecheck, lint, test, build, packaging and secret-scan results in HANDOFF.md.
-- [ ] Download the release ZIP or use release/ThreadBack-AI-v1.1.0.zip. Extract it; manifest.json must be at the extracted root.
+- [ ] Download the release ZIP or use release/ThreadBack-AI-v1.1.1.zip. Extract it; manifest.json must be at the extracted root.
 - [ ] In a separate Chrome/Edge profile, open chrome://extensions or edge://extensions, enable Developer mode, Load unpacked the extracted root, pin the icon and open popup/dashboard.
 - [ ] Click Demo Data and confirm three threads. Open Why, Timeline and Graph. Resume may open login pages. Installed Chrome/Edge qualification remains a human check.
 
