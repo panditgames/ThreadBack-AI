@@ -61,11 +61,14 @@ describe('Phase 8: Security & Privacy Compliance Audit', () => {
     // Should NOT have dangerous host permissions like <all_urls> by default
     expect(manifest.host_permissions).toBeUndefined();
 
-    // Required permissions should be restricted to tabs, storage, alarms
+    // Offscreen hosts the dedicated local inference worker; no page-content or network permission is added.
     expect(manifest.permissions).toContain('tabs');
     expect(manifest.permissions).toContain('storage');
     expect(manifest.permissions).not.toContain('history');
     expect(manifest.permissions).toContain('alarms');
+    expect(manifest.permissions).toContain('offscreen');
+    expect([...manifest.permissions].sort()).toEqual(['alarms','offscreen','storage','tabs']);
+    expect(manifest.content_security_policy.extension_pages).toContain("connect-src 'self'");
     expect(manifest.permissions).not.toContain('cookies');
     expect(manifest.permissions).not.toContain('webRequest');
     expect(manifest.permissions).not.toContain('debugger');

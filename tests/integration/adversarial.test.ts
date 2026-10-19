@@ -13,7 +13,7 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
     expect(resume).toEqual([]);
   });
 
-  it('handles 1 single isolated tab event gracefully', () => {
+  it('handles 1 single isolated tab event gracefully', async () => {
     const engine = new IntentEngine();
     const event: ActivityEvent = {
       id: 'e1',
@@ -26,22 +26,23 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
       eventType: 'navigation',
       isInternalBrowserPage: false,
     };
-    const thread = engine.processEvent(event);
+    const thread = await engine.processEvent(event);
     expect(thread).not.toBeNull();
     expect(engine.getThreads().length).toBe(1);
   });
 
-  it('handles massive burst of 200 tab events in fast succession', () => {
+  it('handles massive burst of 200 tab events in fast succession', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
     for (let i = 0; i < 200; i++) {
-      engine.processEvent({
+      await engine.processEvent({
         id: `burst-${i}`,
         tabId: i,
         url: `https://example.com/item-${i % 5}`,
         title: `Item ${i % 5} on Example`,
         domain: 'example.com',
         pathname: `/item-${i % 5}`,
+        searchQuery: undefined,
         timestamp: base + i * 50, // 50ms apart
         eventType: 'navigation',
         isInternalBrowserPage: false,
@@ -50,7 +51,7 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
     expect(engine.getThreads().length).toBeGreaterThanOrEqual(1);
   });
 
-  it('filters out internal chrome:// and edge:// URLs', () => {
+  it('filters out internal chrome:// and edge:// URLs', async () => {
     const engine = new IntentEngine();
     const chromeEvent: ActivityEvent = {
       id: 'c1',
@@ -73,12 +74,12 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
       isInternalBrowserPage: true,
     };
 
-    expect(engine.processEvent(chromeEvent)).toBeNull();
-    expect(engine.processEvent(edgeEvent)).toBeNull();
+    expect(await engine.processEvent(chromeEvent)).toBeNull();
+    expect(await engine.processEvent(edgeEvent)).toBeNull();
     expect(engine.getThreads().length).toBe(0);
   });
 
-  it('handles emoji, non-English, and very long page titles safely', () => {
+  it('handles emoji, non-English, and very long page titles safely', async () => {
     const engine = new IntentEngine();
     const superLongTitle = 'A'.repeat(5000);
     const emojiTitle = '🚀🔥🎉 EurekaDev Project AI Hackathon 🤖💻';
@@ -120,16 +121,14 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
       isInternalBrowserPage: false,
     };
 
-    expect(() => {
-      engine.processEvent(ev1);
-      engine.processEvent(ev2);
-      engine.processEvent(ev3);
-    }).not.toThrow();
+    await engine.processEvent(ev1);
+    await engine.processEvent(ev2);
+    await engine.processEvent(ev3);
 
     expect(engine.getThreads().length).toBeGreaterThan(0);
   });
 
-  it('handles missing titles, missing hostnames, and malformed URLs', () => {
+  it('handles missing titles, missing hostnames, and malformed URLs', async () => {
     expect(() => parseUrl('javascript:void(0)')).not.toThrow();
     expect(() => parseUrl('')).not.toThrow();
     expect(() => parseUrl('https://')).not.toThrow();
@@ -146,7 +145,7 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
       eventType: 'navigation',
       isInternalBrowserPage: false,
     };
-    expect(engine.processEvent(malformedEvent)).toBeNull();
+    expect(await engine.processEvent(malformedEvent)).toBeNull();
   });
 
   it('handles storage corruption safely and restores initial state', async () => {
@@ -158,11 +157,11 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
     expect(loaded.threads).toBeDefined();
   });
 
-  it('survives repeated split and merge cycles', () => {
+  it('survives repeated split and merge cycles', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
-    const t1 = engine.processEvent({
+    const t1 = (await engine.processEvent({
       id: 'e1',
       tabId: 1,
       url: 'https://site.com/product1',
@@ -172,9 +171,9 @@ describe('Phase 6: Adversarial & Edge Case Resilience', () => {
       timestamp: base,
       eventType: 'navigation',
       isInternalBrowserPage: false,
-    })!;
+    }))!;
 
-    engine.processEvent({
+    await engine.processEvent({
       id: 'e2',
       tabId: 2,
       openerTabId: 1,

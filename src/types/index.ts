@@ -20,6 +20,9 @@ export interface ActivityEvent {
   pathname: string;
   searchQuery?: string;
   searchEngine?: string;
+  semanticMatchKind?: 'PAGE' | 'WORKFLOW';
+  semanticSimilarity?: number;
+  semanticThreshold?: number;
   timestamp: number;
   eventType: ActivityEventType;
   isInternalBrowserPage: boolean;
@@ -107,8 +110,14 @@ export interface IntentThread {
   nextAction: InferredNextAction;
   evidence: ClusterEvidence;
   isManualCorrection?: boolean;
+  preserveSemanticBoundary?: boolean;
   isDemo?: boolean;
   lastInterruptionTimestamp?: number;
+  centroidEmbedding?: number[];
+  embeddingModelVersion?: string;
+  semanticPages?: { url: string; vector: number[] }[];
+  isLatent?: boolean;
+  latentPromotionReason?: 'MULTI_TAB_MATCH' | 'SEARCH_INTENT' | 'MANUAL' | 'SUBSEQUENT_NAVIGATION';
 }
 
 export interface InterruptionBriefing {
@@ -145,4 +154,5 @@ export interface ThreadBackStorageData {
   privacy: PrivacySettings;
   aiSettings: AISettings;
   lastProcessedTimestamp: number;
+  pendingEvents?: ActivityEvent[];
 }

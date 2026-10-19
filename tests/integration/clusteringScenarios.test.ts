@@ -8,7 +8,7 @@ import { IntentEngine } from '../../src/engine/intentClusterer';
 import { ActivityEvent } from '../../src/types';
 
 describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
-  it('correctly clusters Dataset A: Hackathon workflow into one thread', () => {
+  it('groups observed hackathon purpose while abstaining on an ambiguous repository title', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -19,14 +19,22 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'a4', tabId: 4, openerTabId: 3, url: 'https://studio.youtube.com/upload', title: 'YouTube Studio - Upload Hackathon Demo Video', domain: 'studio.youtube.com', pathname: '/upload', timestamp: base + 25 * 60000, eventType: 'tab_opened', isInternalBrowserPage: false },
     ];
 
-    eventsA.forEach(e => engine.processEvent(e));
+    for (const e of eventsA) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
-    expect(threads.length).toBe(1);
-    expect(threads[0].title).toContain('EurekaDev');
-    expect(threads[0].tabs.length).toBe(4);
+    const workflow = threads.find(t => t.tabs.some(tab => tab.url === eventsA[0].url))!;
+    expect(workflow.isLatent).toBe(false);
+    expect(workflow.tabs.map(tab => tab.url)).toEqual([eventsA[0].url, eventsA[2].url, eventsA[3].url]);
+    // An opaque repository name plus 'AI Intent Engine' does not establish hackathon purpose.
+    // Opener identity and the shared project identifier must not force a semantic join.
+    const repository = threads.find(t => t.tabs.some(tab => tab.url === eventsA[1].url))!;
+    expect(repository.id).not.toBe(workflow.id);
+    expect(repository.isLatent).toBe(true);
+    expect(threads.flatMap(t => t.tabs)).toHaveLength(4);
   });
 
-  it('correctly clusters Dataset B: Headphone shopping workflow into one thread', () => {
+  it('correctly clusters Dataset B: Headphone shopping workflow into one thread', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -36,14 +44,16 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'b3', tabId: 12, openerTabId: 11, url: 'https://amazon.com/Sony-WH-1000XM4/dp/B0863TXGM3', title: 'Sony WH-1000XM4 Wireless Premium Noise Canceling Headphones - Amazon', domain: 'amazon.com', pathname: '/Sony-WH-1000XM4/dp/B0863TXGM3', timestamp: base + 8 * 60000, eventType: 'tab_opened', isInternalBrowserPage: false },
     ];
 
-    eventsB.forEach(e => engine.processEvent(e));
+    for (const e of eventsB) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
     expect(threads.length).toBe(1);
     expect(threads[0].title).toContain('Headphones');
     expect(threads[0].tabs.length).toBe(3);
   });
 
-  it('correctly clusters Dataset C: Physics assignment workflow into one thread', () => {
+  it('correctly clusters Dataset C: Physics assignment workflow into one thread', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -53,14 +63,16 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'c3', tabId: 22, openerTabId: 20, url: 'https://hyperphysics.phy-astr.gsu.edu/hbase/quantum/hosc.html', title: 'Harmonic Oscillator Energy - HyperPhysics', domain: 'hyperphysics.phy-astr.gsu.edu', pathname: '/hbase/quantum/hosc.html', timestamp: base + 9 * 60000, eventType: 'tab_opened', isInternalBrowserPage: false },
     ];
 
-    eventsC.forEach(e => engine.processEvent(e));
+    for (const e of eventsC) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
     expect(threads.length).toBe(1);
     expect(threads[0].title).toContain('Physics');
     expect(threads[0].tabs.length).toBe(3);
   });
 
-  it('interleaves all three datasets and cleanly separates them into 3 distinct threads', () => {
+  it('interleaves all three datasets and cleanly separates them into 3 distinct threads', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -88,7 +100,9 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'a4', tabId: 4, openerTabId: 3, url: 'https://studio.youtube.com/upload', title: 'YouTube Studio - Upload Hackathon Demo Video', domain: 'studio.youtube.com', pathname: '/upload', timestamp: base + 540000, eventType: 'tab_opened', isInternalBrowserPage: false },
     ];
 
-    mixedEvents.forEach(e => engine.processEvent(e));
+    for (const e of mixedEvents) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
 
     // Exactly 3 distinct intent threads
@@ -100,7 +114,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     expect(titles).toContain('Physics');
   });
 
-  it('does NOT falsely merge same-domain unrelated pages (e.g. amazon shoes vs amazon headphones)', () => {
+  it('does NOT falsely merge same-domain unrelated pages (e.g. amazon shoes vs amazon headphones)', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -128,13 +142,13 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       isInternalBrowserPage: false,
     };
 
-    engine.processEvent(shoesEvent);
-    engine.processEvent(headphoneEvent);
+    await engine.processEvent(shoesEvent);
+    await engine.processEvent(headphoneEvent);
 
     expect(engine.getThreads().length).toBe(2);
   });
 
-  it('SCENARIO A: Related cross-domain hackathon task (Google, Devpost, Unstop, GitHub, YouTube, ChatGPT) forms ONE intent', () => {
+  it('SCENARIO A: Related cross-domain hackathon task (Google, Devpost, Unstop, GitHub, YouTube, ChatGPT) forms ONE intent', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -148,7 +162,9 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'cd-6', tabId: 6, url: 'https://chatgpt.com/c/67890', title: 'EurekaDev Hackathon Brainstorming & Architecture - ChatGPT', domain: 'chatgpt.com', pathname: '/c/67890', timestamp: base + 150000, eventType: 'tab_opened', isInternalBrowserPage: false },
     ];
 
-    crossDomainEvents.forEach(e => engine.processEvent(e));
+    for (const e of crossDomainEvents) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
 
     // Must form ONE coherent hackathon intent, NOT 5 fragmented tasks
@@ -158,7 +174,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     expect(threads[0].tabs.length).toBe(6);
   });
 
-  it('SCENARIO B & I: Search as contextual bridge preserves continuity without opener metadata (Ctrl+Click / Right-click new tab)', () => {
+  it('SCENARIO B & I: Search as contextual bridge preserves continuity without opener metadata (Ctrl+Click / Right-click new tab)', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -175,7 +191,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       eventType: 'navigation',
       isInternalBrowserPage: false,
     };
-    engine.processEvent(searchEvent);
+    await engine.processEvent(searchEvent);
 
     // 2. User right-clicks / Ctrl+clicks result -> opened in new tab with NO openerTabId
     const rightClickResultEvent: ActivityEvent = {
@@ -191,7 +207,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       eventType: 'tab_opened',
       isInternalBrowserPage: false,
     };
-    engine.processEvent(rightClickResultEvent);
+    await engine.processEvent(rightClickResultEvent);
 
     const threads = engine.getThreads();
     expect(threads.length).toBe(1);
@@ -199,7 +215,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     expect(threads[0].title).toBe('Submit EurekaDev Project');
   });
 
-  it('SCENARIO C: Similar domain (YouTube), different tasks MUST NOT merge into one task', () => {
+  it('SCENARIO C: Similar domain (YouTube), different tasks MUST NOT merge into one task', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -227,15 +243,15 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       isInternalBrowserPage: false,
     };
 
-    engine.processEvent(ytHackathon);
-    engine.processEvent(ytPhysics);
+    await engine.processEvent(ytHackathon);
+    await engine.processEvent(ytPhysics);
 
     const threads = engine.getThreads();
     expect(threads.length).toBe(2);
     expect(threads.map(t => t.title)).toContain('Submit EurekaDev Project');
   });
 
-  it('SCENARIO D: Same website, different ChatGPT conversations MUST remain separate', () => {
+  it('SCENARIO D: Same website, different ChatGPT conversations MUST remain separate', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -275,15 +291,15 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       isInternalBrowserPage: false,
     };
 
-    engine.processEvent(gpt1);
-    engine.processEvent(gpt2);
-    engine.processEvent(gpt3);
+    await engine.processEvent(gpt1);
+    await engine.processEvent(gpt2);
+    await engine.processEvent(gpt3);
 
     const threads = engine.getThreads();
     expect(threads.length).toBe(3);
   });
 
-  it('SCENARIO E: Cross-domain shopping (Google, Amazon, RTINGS, Reddit, YouTube review) forms ONE shopping intent', () => {
+  it('SCENARIO E: Cross-domain shopping (Google, Amazon, RTINGS, Reddit, YouTube review) forms ONE shopping intent', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -295,7 +311,9 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'sh-5', tabId: 5, url: 'https://www.youtube.com/watch?v=review123', title: 'Sony WH-1000XM5 vs Bose QC45 Noise Cancelling Headphones Review - YouTube', domain: 'youtube.com', pathname: '/watch', timestamp: base + 120000, eventType: 'tab_opened', isInternalBrowserPage: false },
     ];
 
-    shoppingEvents.forEach(e => engine.processEvent(e));
+    for (const e of shoppingEvents) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
 
     expect(threads.length).toBe(1);
@@ -303,7 +321,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     expect(threads[0].tabs.length).toBe(5);
   });
 
-  it('SCENARIO F: Completely unrelated tasks opened rapidly within 1-2 minutes MUST NOT merge', () => {
+  it('SCENARIO F: Completely unrelated tasks opened rapidly within 1-2 minutes MUST NOT merge', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -314,14 +332,16 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       { id: 'r-4', tabId: 4, url: 'https://booking.com/hotel/tokyo', title: 'Tokyo Shinjuku Hotel Vacation Booking', domain: 'booking.com', pathname: '/hotel/tokyo', timestamp: base + 60000, eventType: 'navigation', isInternalBrowserPage: false },
     ];
 
-    rapidEvents.forEach(e => engine.processEvent(e));
+    for (const e of rapidEvents) {
+      await engine.processEvent(e);
+    }
     const threads = engine.getThreads();
 
     // Must be 4 separate threads despite being opened within 60 seconds
     expect(threads.length).toBe(4);
   });
 
-  it('SCENARIO G: Weak shared word "apply" MUST NOT cause false grouping or false internship categorization', () => {
+  it('SCENARIO G: Weak shared word "apply" MUST NOT cause false grouping or false internship categorization', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
@@ -349,8 +369,8 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
       isInternalBrowserPage: false,
     };
 
-    engine.processEvent(hackathonEvent);
-    engine.processEvent(internshipEvent);
+    await engine.processEvent(hackathonEvent);
+    await engine.processEvent(internshipEvent);
 
     const threads = engine.getThreads();
     expect(threads.length).toBe(2);
@@ -362,12 +382,12 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     expect(internThread?.title).toBe('Software Internship Applications');
   });
 
-  it('SCENARIO H: Repeated navigation in same tab updates page without fragmenting threads', () => {
+  it('SCENARIO H: Repeated navigation in same tab updates page without fragmenting threads', async () => {
     const engine = new IntentEngine();
     const base = Date.now();
 
     // Page 1
-    engine.processEvent({
+    await engine.processEvent({
       id: 'nav-1',
       tabId: 1,
       url: 'https://devpost.com/hackathons/eurekadev',
@@ -380,7 +400,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     });
 
     // Page 2 in same tab (navigated to rules)
-    engine.processEvent({
+    await engine.processEvent({
       id: 'nav-2',
       tabId: 1,
       url: 'https://devpost.com/hackathons/eurekadev/rules',
@@ -393,7 +413,7 @@ describe('Phase 3: Synthetic Realistic Clustering Scenarios', () => {
     });
 
     // Page 3 in same tab (navigated to submission form)
-    engine.processEvent({
+    await engine.processEvent({
       id: 'nav-3',
       tabId: 1,
       url: 'https://devpost.com/software/new',
@@ -424,49 +444,57 @@ describe('Independent release audit regressions', () => {
     searchQuery: query,
   });
 
-  it('keeps three overlapping searches and interleaved no-opener results separate', () => {
+  it('keeps three overlapping searches and interleaved no-opener results separate', async () => {
     const e = new IntentEngine();
     const queries = ['EurekaDev hackathon software submission', 'software engineering internship', 'ANC headphones'];
-    const owners = queries.map((q, i) => e.processEvent(search(String(i + 1), q, i * 1000))!.id);
+    const owners: string[] = [];
+    for (let i = 0; i < queries.length; i++) {
+      const t = await e.processEvent(search(String(i + 1), queries[i], i * 1000));
+      owners.push(t!.id);
+    }
     const results = [
       page('11', 'Software Engineering Internship Careers', 'https://careers.example/internship', 4000),
       page('12', 'EurekaDev Hackathon Submission', 'https://devpost.com/software/eurekadev', 5000),
       page('13', 'ANC Headphones Comparison', 'https://reviews.example/anc', 6000),
     ];
-    const joined = results.map(p => e.processEvent(p)!.id);
+    const joined: string[] = [];
+    for (const p of results) {
+      const t = await e.processEvent(p);
+      joined.push(t!.id);
+    }
     expect(new Set(owners).size).toBe(3);
     expect(joined).toEqual([owners[1], owners[0], owners[2]]);
     expect(e.getThreads()).toHaveLength(3);
   });
 
-  it('does not fabricate a search query on a result or propagate context through unrelated child links', () => {
+  it('does not fabricate a search query on a result or propagate context through unrelated child links', async () => {
     const e = new IntentEngine();
-    const origin = e.processEvent(search('1', 'EurekaDev hackathon submission'))!;
+    const origin = (await e.processEvent(search('1', 'EurekaDev hackathon submission')))!;
     const result = page('2', 'EurekaDev Hackathon Submission', 'https://unstop.com/hackathons/eurekadev', 1000);
-    expect(e.processEvent(result)!.id).toBe(origin.id);
+    expect((await e.processEvent(result))!.id).toBe(origin.id);
     expect(e.getThread(origin.id)!.events.find(x => x.id === result.id)!.searchQuery).toBeUndefined();
     expect(result.searchQuery).toBeUndefined();
     const unrelated = page('3', 'Sourdough Bread Baking', 'https://recipes.example/bread', 2000, 2);
-    expect(e.processEvent(unrelated)!.id).not.toBe(origin.id);
+    expect((await e.processEvent(unrelated))!.id).not.toBe(origin.id);
   });
 
-  it('does not merge a single shared subject word across unrelated videos or conversations', () => {
+  it('does not merge a single shared subject word across unrelated videos or conversations', async () => {
     for (const domain of ['youtube.com', 'chatgpt.com', 'chat.openai.com']) {
       const e = new IntentEngine();
-      e.processEvent(page('1', 'Python Astronomy Orbital Analysis', 'https://' + domain + '/topic/astronomy'));
-      e.processEvent(page('2', 'Python Django Authentication', 'https://' + domain + '/topic/django', 1000));
+      await e.processEvent(page('1', 'Python Astronomy Orbital Analysis', 'https://' + domain + '/topic/astronomy'));
+      await e.processEvent(page('2', 'Python Django Authentication', 'https://' + domain + '/topic/django', 1000));
       expect(e.getThreads()).toHaveLength(2);
     }
   });
 
-  it('loses only transient confidence on worker restart without inventing or reviving erased searches', () => {
+  it('loses only transient confidence on worker restart without inventing or reviving erased searches', async () => {
     const e = new IntentEngine();
-    const owner = e.processEvent(search('1', 'EurekaDev hackathon submission'))!;
+    const owner = (await e.processEvent(search('1', 'EurekaDev hackathon submission')))!;
     const restarted = new IntentEngine(structuredClone(e.getThreads()));
-    expect(restarted.processEvent(page('2', 'EurekaDev Hackathon Submission', 'https://devpost.com/eurekadev', 1000))!.id).toBe(owner.id);
-    expect(restarted.processEvent(page('3', 'Sourdough Bread Baking', 'https://recipes.example/bread', 2000, 1))!.id).not.toBe(owner.id);
+    expect((await restarted.processEvent(page('2', 'EurekaDev Hackathon Submission', 'https://devpost.com/eurekadev', 1000)))!.id).toBe(owner.id);
+    expect((await restarted.processEvent(page('3', 'Sourdough Bread Baking', 'https://recipes.example/bread', 2000, 1)))!.id).not.toBe(owner.id);
     e.setThreads([]);
-    const fresh = e.processEvent(page('4', 'EurekaDev Ecology Conference', 'https://conference.example/ecology', 3000))!;
+    const fresh = (await e.processEvent(page('4', 'EurekaDev Ecology Conference', 'https://conference.example/ecology', 3000)))!;
     expect(fresh.events[0].searchQuery).toBeUndefined();
     expect(e.getThreads()).toHaveLength(1);
   });
@@ -485,48 +513,48 @@ describe('Independent release audit regressions', () => {
     }
   });
 
-  it('preserves explicit completion through subsequent activity and storage reconstruction without deleting', () => {
+  it('preserves explicit completion through subsequent activity and storage reconstruction without deleting', async () => {
     const e = new IntentEngine();
     const p = page('1', 'EurekaDev Hackathon Project', 'https://devpost.com/eurekadev');
-    const id = e.processEvent(p)!.id;
+    const id = (await e.processEvent(p))!.id;
     e.setThreadStatus(id, 'LIKELY_COMPLETE');
-    e.processEvent({ ...p, id: '2', timestamp: base + 1000 });
+    await e.processEvent({ ...p, id: '2', timestamp: base + 1000 });
     const restarted = new IntentEngine(structuredClone(e.getThreads()));
-    restarted.processEvent({ ...p, id: '3', timestamp: base + 2000 });
+    await restarted.processEvent({ ...p, id: '3', timestamp: base + 2000 });
     expect(restarted.getThread(id)!.status).toBe('LIKELY_COMPLETE');
     expect(restarted.getThreads()).toHaveLength(1);
     restarted.setThreadStatus(id, 'ACTIVE');
-    restarted.processEvent({ ...p, id: '4', timestamp: base + 3000 });
+    await restarted.processEvent({ ...p, id: '4', timestamp: base + 3000 });
     expect(restarted.getThread(id)!.status).toBe('ACTIVE');
   });
 
   it('accepts normal case-insensitive HTTP(S) with queries/fragments and blocks every non-web scheme in collection and resume', async () => {
     for (const url of ['javascript:alert(1)', 'data:text/html,x', 'file:///tmp/x', 'blob:https://example.com/id', 'filesystem:https://example.com/temporary/x', 'chrome://settings', 'edge://settings', 'about:blank', 'not a URL']) {
       expect(parseUrl(url).isValid).toBe(false);
-      expect(new IntentEngine().processEvent({ ...page('1', 'Unsafe', 'https://example.com/'), url })).toBeNull();
+      expect(await new IntentEngine().processEvent({ ...page('1', 'Unsafe', 'https://example.com/'), url })).toBeNull();
       expect(selectResumeTabs([{ id: 'x', url, title: 'Unsafe', domain: '', lastAccessed: base, isClosed: true, order: 0 }])).toEqual([]);
     }
     const url = 'HTTPS://example.com/path?q=physics#notes';
     expect(parseUrl(url).isValid).toBe(true);
-    const thread = new IntentEngine().processEvent({ ...page('1', 'Physics research', 'https://example.com/'), url })!;
+    const thread = (await new IntentEngine().processEvent({ ...page('1', 'Physics research', 'https://example.com/'), url }))!;
     const api = { query: vi.fn(async () => []), create: vi.fn(async () => ({})), update: vi.fn() };
     await executeResumeTask(thread, api as unknown as typeof chrome.tabs);
     expect(api.create).toHaveBeenCalledTimes(1);
   });
-  it('requires topic evidence even when Chromium assigns an opener on shared hosting', () => {
+
+  it('requires topic evidence even when Chromium assigns an opener on shared hosting', async () => {
     const e = new IntentEngine();
-    const first = e.processEvent(page('1', 'EurekaDev Hackathon Submission', 'https://work.shared.example/hackathon'))!;
-    expect(e.processEvent(page('2', 'Noise Cancelling Headphones', 'https://shop.shared.example/headphones', 1000, 1))!.id).not.toBe(first.id);
+    const first = (await e.processEvent(page('1', 'EurekaDev Hackathon Submission', 'https://work.shared.example/hackathon')))!;
+    expect((await e.processEvent(page('2', 'Noise Cancelling Headphones', 'https://shop.shared.example/headphones', 1000, 1)))!.id).not.toBe(first.id);
     for (const domain of ['youtube.com', 'chatgpt.com']) {
       const platform = new IntentEngine();
-      platform.processEvent(page('1', 'Python Astronomy Orbital Analysis', 'https://' + domain + '/one'));
-      platform.processEvent(page('2', 'Python Django Authentication', 'https://' + domain + '/two', 1000, 1));
+      await platform.processEvent(page('1', 'Python Astronomy Orbital Analysis', 'https://' + domain + '/one'));
+      await platform.processEvent(page('2', 'Python Django Authentication', 'https://' + domain + '/two', 1000, 1));
       expect(platform.getThreads()).toHaveLength(2);
     }
     const queries = new IntentEngine();
-    queries.processEvent(search('1', 'EurekaDev hackathon software submission'));
-    queries.processEvent({ ...search('2', 'software engineering internship', 1000), openerTabId: 1 });
+    await queries.processEvent(search('1', 'EurekaDev hackathon software submission'));
+    await queries.processEvent({ ...search('2', 'software engineering internship', 1000), openerTabId: 1 });
     expect(queries.getThreads()).toHaveLength(2);
   });
-
 });

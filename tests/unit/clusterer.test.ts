@@ -11,7 +11,7 @@ describe('IntentEngine & Clustering Lifecycle', () => {
     engine = new IntentEngine();
   });
 
-  it('creates a new intent thread from initial browsing event', () => {
+  it('creates a new intent thread from initial browsing event', async () => {
     const event: ActivityEvent = {
       id: 'ev-1',
       tabId: 1,
@@ -25,14 +25,14 @@ describe('IntentEngine & Clustering Lifecycle', () => {
       isInternalBrowserPage: false,
     };
 
-    const thread = engine.processEvent(event);
+    const thread = await engine.processEvent(event);
     expect(thread).not.toBeNull();
     expect(thread?.title).toContain('EurekaDev');
     expect(thread?.tabs.length).toBe(1);
     expect(thread?.status).toBe('ACTIVE');
   });
 
-  it('clusters related navigation events into the same thread', () => {
+  it('clusters related navigation events into the same thread', async () => {
     const now = Date.now();
     const eventA: ActivityEvent = {
       id: 'ev-1',
@@ -61,15 +61,15 @@ describe('IntentEngine & Clustering Lifecycle', () => {
       isInternalBrowserPage: false,
     };
 
-    const threadA = engine.processEvent(eventA);
-    const threadB = engine.processEvent(eventB);
+    const threadA = await engine.processEvent(eventA);
+    const threadB = await engine.processEvent(eventB);
 
     expect(threadA?.id).toBe(threadB?.id);
     expect(threadB?.tabs.length).toBe(2);
     expect(engine.getThreads().length).toBe(1);
   });
 
-  it('separates distinct tasks into separate intent threads', () => {
+  it('separates distinct tasks into separate intent threads', async () => {
     const now = Date.now();
     const hackathonEvent: ActivityEvent = {
       id: 'ev-1',
@@ -97,14 +97,14 @@ describe('IntentEngine & Clustering Lifecycle', () => {
       isInternalBrowserPage: false,
     };
 
-    const thread1 = engine.processEvent(hackathonEvent);
-    const thread2 = engine.processEvent(shoppingEvent);
+    const thread1 = await engine.processEvent(hackathonEvent);
+    const thread2 = await engine.processEvent(shoppingEvent);
 
     expect(thread1?.id).not.toBe(thread2?.id);
     expect(engine.getThreads().length).toBe(2);
   });
 
-  it('supports renaming an intent thread manually', () => {
+  it('supports renaming an intent thread manually', async () => {
     const event: ActivityEvent = {
       id: 'ev-1',
       tabId: 1,
@@ -116,15 +116,15 @@ describe('IntentEngine & Clustering Lifecycle', () => {
       eventType: 'navigation',
       isInternalBrowserPage: false,
     };
-    const thread = engine.processEvent(event)!;
+    const thread = (await engine.processEvent(event))!;
     const renamed = engine.renameThread(thread.id, 'Custom Hackathon Sprint');
     expect(renamed?.title).toBe('Custom Hackathon Sprint');
     expect(renamed?.isManualCorrection).toBe(true);
   });
 
-  it('supports merging two threads together', () => {
+  it('supports merging two threads together', async () => {
     const now = Date.now();
-    const thread1 = engine.processEvent({
+    const thread1 = (await engine.processEvent({
       id: 'ev-1',
       tabId: 1,
       url: 'https://rtings.com/headphones',
@@ -134,19 +134,19 @@ describe('IntentEngine & Clustering Lifecycle', () => {
       timestamp: now,
       eventType: 'navigation',
       isInternalBrowserPage: false,
-    })!;
+    }))!;
 
-    const thread2 = engine.processEvent({
+    const thread2 = (await engine.processEvent({
       id: 'ev-2',
       tabId: 2,
-      url: 'https://amazon.com/headphones',
-      title: 'Headphones Deals Amazon',
-      domain: 'amazon.com',
-      pathname: '/headphones',
+      url: 'https://reddit.com/r/MechanicalKeyboards',
+      title: 'Custom Mechanical Keyboard Build Guide',
+      domain: 'reddit.com',
+      pathname: '/r/MechanicalKeyboards',
       timestamp: now + 4 * 3600000,
       eventType: 'navigation',
       isInternalBrowserPage: false,
-    })!;
+    }))!;
 
     expect(engine.getThreads().length).toBe(2);
 
@@ -157,7 +157,7 @@ describe('IntentEngine & Clustering Lifecycle', () => {
     expect(merged?.isManualCorrection).toBe(true);
   });
 
-  it('supports splitting selected tabs into a new intent thread', () => {
+  it('supports splitting selected tabs into a new intent thread', async () => {
     const now = Date.now();
     const event1: ActivityEvent = {
       id: 'ev-1',
@@ -182,8 +182,8 @@ describe('IntentEngine & Clustering Lifecycle', () => {
       isInternalBrowserPage: false,
     };
 
-    const thread = engine.processEvent(event1)!;
-    engine.processEvent(event2);
+    const thread = (await engine.processEvent(event1))!;
+    await engine.processEvent(event2);
 
     const result = engine.splitTabsFromThread(thread.id, ['https://amazon.com/productB'], 'Shortlisted Candidate B');
     expect(result).not.toBeNull();

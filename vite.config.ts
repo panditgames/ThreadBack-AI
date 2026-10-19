@@ -16,6 +16,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: resolve(__dirname, 'popup.html'),
+        offscreen: resolve(__dirname, 'offscreen.html'),
         dashboard: resolve(__dirname, 'dashboard.html'),
         sidepanel: resolve(__dirname, 'sidepanel.html'),
         serviceWorker: resolve(__dirname, 'src/background/serviceWorker.ts'),
@@ -40,5 +41,6 @@ export default defineConfig({
     ],
     setupFiles: ['./tests/setup.ts'],
     testTimeout: 20000,
+    hookTimeout: 90000, // Local ONNX module loading/transform can exceed the default 10-second hook budget.
   },
 });

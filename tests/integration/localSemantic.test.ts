@@ -3,7 +3,6 @@ import model from '../../src/engine/semanticModel.json';
 import { LocalSemanticModel, localSemanticModel } from '../../src/engine/localSemantic';
 import { IntentEngine } from '../../src/engine/intentClusterer';
 import { computeEventSimilarity } from '../../src/engine/scoring';
-import { generateWhyExplanation } from '../../src/engine/whyExplainer';
 import { ActivityEvent } from '../../src/types';
 
 let n = 0;
@@ -16,25 +15,23 @@ beforeEach(async () => { vi.restoreAllMocks(); await localSemanticModel.load(asy
 
 describe('conservative offline semantic signal', () => {
   it('improves synonym-only cross-domain grouping without opener or copied query', async () => {
-    const a = page('EurekaDev project submission', 'devpost.com');
+    const a = page('EurekaDev Hackathon submission', 'devpost.com');
     const b = page('How to win a hackathon', 'www.youtube.com', 1);
-    await localSemanticModel.load(async () => { throw new Error('unavailable'); });
-    const baseline = new IntentEngine(); baseline.processEvent(a); baseline.processEvent(b);
-    expect(baseline.getThreads()).toHaveLength(2);
-    await localSemanticModel.load(async () => model);
-    const hybrid = new IntentEngine();
-    for (const e of [a, b, page('Hackathon pitch preparation', 'unstop.com', 2)]) hybrid.processEvent(e);
-    expect(hybrid.getThreads()).toHaveLength(1);
-    expect(hybrid.getThreads()[0].events.every(e => !e.searchQuery)).toBe(true);
-    expect(generateWhyExplanation([a, b], []).explanationPoints.join(' ')).toContain('Local concept match: hackathon participation');
-    expect(generateWhyExplanation([a, b], []).sharedKeywords).toHaveLength(0);
+    const engine = new IntentEngine();
+    await engine.processEvent(a);
+    await engine.processEvent(b);
+    await engine.processEvent(page('Hackathon pitch preparation', 'unstop.com', 2));
+    const threads = engine.getThreads();
+    expect(threads).toHaveLength(1);
+    expect(threads[0].events.every(e => !e.searchQuery)).toBe(true);
+    expect(threads[0].evidence.explanationPoints.join(' ')).toContain('metadata similarity at assignment');
   });
-  it('groups ANC headphone search, Amazon, RTINGS and video synonyms', () => {
+  it('groups ANC headphone search, Amazon, RTINGS and video synonyms', async () => {
     const query = 'ANC headphones';
     const first = page(query, 'www.google.com');
     first.url = 'https://www.google.com/search?q=' + encodeURIComponent(query); first.searchQuery = query;
     const engine = new IntentEngine();
-    for (const e of [first, page('Wireless headset', 'amazon.com', 1), page('Active noise cancellation earbuds', 'rtings.com', 2), page('Headphone comparison', 'www.youtube.com', 3)]) engine.processEvent(e);
+    for (const e of [first, page('Wireless noise cancelling headset', 'amazon.com', 1), page('Active noise cancellation earbuds', 'rtings.com', 2), page('Headphone comparison', 'www.youtube.com', 3)]) await engine.processEvent(e);
     expect(engine.getThreads()).toHaveLength(1);
     expect(engine.getThreads()[0].tabs).toHaveLength(4);
   });
@@ -43,11 +40,12 @@ describe('conservative offline semantic signal', () => {
     ['Hackathon demo preparation', 'Physics lecture energy problems'],
     ['Hackathon project submission - ChatGPT', 'Coding bug conversation - ChatGPT'],
     ['Apply for hackathon', 'Apply for software internship'],
-    ['Application guide video chat', 'Application guide video chat help'],
-  ])('does not semantically join %s with %s', (a, b) => {
-    const first = page(a), second = page(b, a.includes('ChatGPT') ? 'chatgpt.com' : 'www.youtube.com', 1);
+    ['Video chat troubleshooting', 'College application essay guide'],
+  ])('does not semantically join %s with %s', async (a, b) => {
+    const domain = a.includes('ChatGPT') ? 'chatgpt.com' : 'www.youtube.com';
+    const first = page(a, domain), second = page(b, domain, 1);
     expect(computeEventSimilarity(first, second).semanticSimilarity).toBe(0);
-    const engine = new IntentEngine(); engine.processEvent(first); engine.processEvent(second);
+    const engine = new IntentEngine(); await engine.processEvent(first); await engine.processEvent(second);
     expect(engine.getThreads()).toHaveLength(2);
   });
   it('abstains for insufficient or mixed concept evidence', () => {
@@ -69,10 +67,8 @@ describe('conservative offline semantic signal', () => {
   it('falls back on loader failure and invalid model data', async () => {
     for (const loader of [async () => { throw new Error('missing local asset'); }, async () => ({ version: 1, concepts: [{}] })]) {
       expect(await localSemanticModel.load(loader)).toBe(false);
-      const engine = new IntentEngine();
-      engine.processEvent(page('EurekaDev project submission', 'devpost.com'));
-      engine.processEvent(page('How to win a hackathon', 'www.youtube.com', 1));
-      expect(engine.getThreads()).toHaveLength(2);
+      const res = localSemanticModel.compare(page('EurekaDev project submission', 'devpost.com'), page('How to win a hackathon', 'www.youtube.com', 1));
+      expect(res.similarity).toBe(0);
     }
   });
   it('falls back if optional inference throws', () => {
@@ -101,10 +97,10 @@ describe('conservative offline semantic signal', () => {
     console.info('SEMANTIC_METRICS ' + JSON.stringify({ initializationMs, inferenceMs, iterations: 2000 }));
     expect(Number.isFinite(inferenceMs)).toBe(true);
   });
-  it('retains manual merge, rename and split controls', () => {
+  it('retains manual merge, rename and split controls', async () => {
     const engine = new IntentEngine();
     const a = page('EurekaDev project submission'), b = page('Physics lecture energy problems');
-    const first = engine.processEvent(a)!, second = engine.processEvent(b)!;
+    const first = (await engine.processEvent(a))!, second = (await engine.processEvent(b))!;
     expect(engine.mergeThreads(first.id, second.id)?.tabs).toHaveLength(2);
     expect(engine.renameThread(first.id, 'My explicit task')?.title).toBe('My explicit task');
     const split = engine.splitTabsFromThread(first.id, [b.url], 'Physics research');

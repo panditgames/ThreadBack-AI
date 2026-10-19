@@ -16,3 +16,6 @@ test-results/
 browser-profile*/
 
 release/
+
+# Local model tournament assets are not production assets
+tournament_models/

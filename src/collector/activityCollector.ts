@@ -8,6 +8,7 @@ export class ActivityCollector {
   private privacySettings: PrivacySettings;
   private isListening = false;
   private lastCapturedUrlByTab: Map<number, string> = new Map();
+  private lastCapturedTitleByTab: Map<number, string> = new Map();
 
   constructor(
     onEvent: ActivityEventCallback,
@@ -53,7 +54,7 @@ export class ActivityCollector {
     chrome.tabs.onRemoved.removeListener(this.handleTabRemoved);
   }
 
-  private isDomainExcluded(domain: string): boolean {
+  public isDomainExcluded(domain: string): boolean {
     if (!domain) return false;
     if (['localhost', '127.0.0.1', '0.0.0.0', '[::1]'].includes(domain) || domain.endsWith('.local')) return true;
     const clean = domain.toLowerCase();
@@ -78,13 +79,12 @@ export class ActivityCollector {
       return null;
     }
 
-    // Chromium can report a URL-shaped placeholder even at load completion.
-    // Use its path, not shared hostname tokens, until a real title arrives.
+    // A URL/hostname placeholder is not a document title. Preserve the URL as latent metadata;
+    // a later real title is assigned semantically by the engine.
     const rawTitle = overrideTitle || tab.title || '';
     const withoutScheme = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-    const title = !rawTitle || withoutScheme(rawTitle) === withoutScheme(rawUrl)
-      ? parsed.pathname.replace(/[-_/]+/g, ' ').trim() || parsed.domain
-      : rawTitle;
+    const title = !rawTitle || withoutScheme(rawTitle) === withoutScheme(rawUrl) || rawTitle === parsed.domain
+      ? '' : rawTitle;
 
     return {
       id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -116,16 +116,18 @@ export class ActivityCollector {
     // A loading tab may expose its URL as a temporary title. Wait for the
     // completed document before assigning it permanently to an intent thread.
     if (tab.status === 'loading') return;
+    if (changeInfo.url && !changeInfo.title && changeInfo.status !== 'complete') return;
 
     const currentUrl = changeInfo.url || tab.url || '';
     const lastUrl = this.lastCapturedUrlByTab.get(tabId);
 
-    if (currentUrl && currentUrl === lastUrl && !changeInfo.title) {
+    if (currentUrl && currentUrl === lastUrl && !changeInfo.title && tab.title === this.lastCapturedTitleByTab.get(tabId)) {
       return; // prevent duplicate event for the same tab URL
     }
 
     if (currentUrl) {
       this.lastCapturedUrlByTab.set(tabId, currentUrl);
+      this.lastCapturedTitleByTab.set(tabId, tab.title || '');
     }
 
     const event = this.createEvent(tab, 'navigation', currentUrl, changeInfo.title || tab.title);
@@ -135,7 +137,7 @@ export class ActivityCollector {
   };
 
   private handleTabCreated = (tab: chrome.tabs.Tab) => {
-    if (!tab.url || tab.status === 'loading') return;
+    if (!tab.url || !tab.title || tab.status === 'loading' || tab.status === 'unloaded') return;
     const event = this.createEvent(tab, 'tab_opened');
     if (event) {
       this.onEventCallback(event);
@@ -145,7 +147,7 @@ export class ActivityCollector {
   private handleTabActivated = async (activeInfo: chrome.tabs.TabActiveInfo) => {
     try {
       const tab = await chrome.tabs.get(activeInfo.tabId);
-      if (!tab || !tab.url || tab.status === 'loading') return;
+      if (!tab || !tab.url || !tab.title || tab.status === 'loading' || tab.status === 'unloaded') return;
       const event = this.createEvent(tab, 'tab_activated');
       if (event) {
         this.onEventCallback(event);
@@ -158,6 +160,7 @@ export class ActivityCollector {
   private handleTabRemoved = (tabId: number) => {
     const lastUrl = this.lastCapturedUrlByTab.get(tabId);
     this.lastCapturedUrlByTab.delete(tabId);
+    this.lastCapturedTitleByTab.delete(tabId);
 
     if (lastUrl && !isInternalUrl(lastUrl)) {
       const parsed = parseUrl(lastUrl);

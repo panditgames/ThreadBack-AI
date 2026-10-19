@@ -1,4 +1,4 @@
-import { localSemanticModel } from './localSemantic';
+// UI/evidence similarity only. Automatic workflow membership never imports this module.
 import { extractBaseDomain } from './urlParser';
 import { ActivityEvent } from '../types';
 import { extractTitleKeywords, extractQueryKeywords, computeOverlapScore, hasTopicEvidence } from './keywords';
@@ -186,18 +186,8 @@ export function computeEventSimilarity(
   if ((hasTopicEvidence(topicTokens) || recordingContext) && temporalSimilarity >= 0.5) totalScore = Math.min(1.0, totalScore + 0.20);
   if (!hasTopicEvidence(topicTokens) && !recordingContext && !linkedTopic) totalScore = Math.min(totalScore, 0.35);
 
-  // Only uncertain, recent heuristic matches may use the optional local signal.
-  // Strong decisions are unchanged; model absence/errors always preserve heuristics.
-  let semanticSimilarity = 0;
-  if (totalScore >= 0.18 && totalScore < 0.40 && temporalSimilarity >= 0.7) {
-    try {
-      const semantic = localSemanticModel.compare(eventA, eventB);
-      if (semantic.similarity === 1 && semantic.label) {
-        semanticSimilarity = 1;
-        rationale.push('Local concept match: ' + semantic.label + ' (metadata only)');
-      }
-    } catch { /* Optional model failures must never interrupt collection. */ }
-  }
+  // No legacy concept model is loaded in the production UI or membership path.
+  const semanticSimilarity = 0;
 
   // A shared domain/window/tab alone is not evidence of a shared task.
   if (!semanticSimilarity && titleSimilarity === 0 && querySimilarity === 0 && openerSimilarity !== 1) totalScore *= 0.5;

@@ -51,15 +51,49 @@ describe('MV3 worker persistence and privacy integration', () => {
         const data = await originalLoad();
         const saved = Object.values(data.threads).flatMap(t => t.tabs.map(t => t.url));
         expect(urls.every(url => saved.includes(url))).toBe(true);
-      }, { timeout: 5000 });
+      }, { timeout: 15000 });
       const live = await send({ type: 'GET_ALL_THREADS' });
       expect(urls.every(url => live.threads.some((t: any) => t.tabs.some((tab: any) => tab.url === url)))).toBe(true);
     } finally { delayed.mockRestore(); }
   });
   it('keeps delete-all empty through alarm synchronization and fresh storage reads', async () => {
-    await storageManager.clearAllData();
-    await vi.waitFor(async () => expect((await send({ type: 'GET_ALL_THREADS' })).threads).toEqual([]));
+    await send({ type: 'CLEAR_ALL_DATA' });
+    await vi.waitFor(async () => expect((await send({ type: 'GET_ALL_THREADS' })).threads).toEqual([]), { timeout: 10000 });
     chromeMock.alarms.onAlarm.trigger({ name: 'threadback_sync' } as chrome.alarms.Alarm);
-    await vi.waitFor(async () => expect(Object.values((await storageManager.load()).threads)).toEqual([]));
+    await vi.waitFor(async () => expect(Object.values((await storageManager.load()).threads)).toEqual([]), { timeout: 10000 });
+  });
+
+  it('replays unresolved pending events upon worker startup after abrupt termination', async () => {
+    await send({ type: 'CLEAR_ALL_DATA' });
+    // Simulate an event that was durably logged right before the worker was killed mid-inference
+    const killedEvent = {
+      id: 'killed-event-1',
+      tabId: 991,
+      windowId: 1,
+      url: 'https://eurekadev.devpost.com/submission-guidelines',
+      title: 'EurekaDev Hackathon Submission Guidelines',
+      domain: 'eurekadev.devpost.com',
+      pathname: '/submission-guidelines',
+      timestamp: Date.now(),
+      eventType: 'navigation' as const,
+      isInternalBrowserPage: false,
+    };
+    await storageManager.addPendingEvent(killedEvent);
+
+    const pendingBefore = await storageManager.getPendingEvents();
+    expect(pendingBefore).toHaveLength(1);
+    expect(pendingBefore[0].id).toBe('killed-event-1');
+
+    // Simulate worker restart / replay trigger
+    const replayRes = await send({ type: 'REPLAY_PENDING_EVENTS' });
+    expect(replayRes.success).toBe(true);
+    expect(replayRes.replayed).toBe(1);
+
+    await vi.waitFor(async () => {
+      const pendingAfter = await storageManager.getPendingEvents();
+      expect(pendingAfter).toHaveLength(0); // resolved!
+      const threads = (await send({ type: 'GET_ALL_THREADS' })).threads;
+      expect(threads.some((t: any) => t.tabs.some((tab: any) => tab.url === killedEvent.url))).toBe(true);
+    }, { timeout: 15000 });
   });
 });

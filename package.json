@@ -1,18 +1,19 @@
 {
   "name": "threadback-ai",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "ThreadBack AI - Remembers what you were trying to accomplish across browser tabs.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --max-warnings 0",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=1 --no-file-parallelism",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xenova/transformers": "^2.17.2",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
@@ -32,6 +33,7 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.5",
     "jsdom": "^26.0.0",
+    "playwright": "^1.64.1",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2",

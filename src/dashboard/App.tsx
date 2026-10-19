@@ -26,10 +26,12 @@ import {
 } from '../storage/storageManager';
 import { AISettings, IntentThread, InterruptionBriefing, PrivacySettings, ThreadStatus } from '../types';
 
+type DashboardFilter = 'ALL' | ThreadStatus | 'STANDALONE';
+
 export const DashboardApp: React.FC = () => {
   const [threads, setThreads] = useState<IntentThread[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | ThreadStatus>('ALL');
+  const [statusFilter, setStatusFilter] = useState<DashboardFilter>('ALL');
   const [privacy, setPrivacy] = useState<PrivacySettings>(DEFAULT_PRIVACY_SETTINGS);
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
   const [interruption, setInterruption] = useState<InterruptionBriefing | null>(null);
@@ -153,12 +155,33 @@ export const DashboardApp: React.FC = () => {
     setInterruption(detectInterruption(demo[0]));
   };
 
+  const handlePromoteLatent = async (threadId: string) => {
+    const engine = new IntentEngine(threads);
+    const promoted = engine.promoteLatentThread(threadId);
+    if (!promoted) return;
+    const updated = engine.getThreads();
+    setThreads(updated);
+    await storageManager.saveThreads(updated);
+  };
+
+  const latentCount = threads.filter(t => !!t.isLatent).length;
+
   // Filter & Search
   const filteredThreads = threads.filter(thread => {
-    // Status filter
-    if (statusFilter !== 'ALL' && thread.status !== statusFilter) {
-      return false;
+    // If viewing STANDALONE filter, only show latent singleton tabs
+    if (statusFilter === 'STANDALONE') {
+      if (!thread.isLatent) return false;
+    } else {
+      // By default (ALL, ACTIVE, PAUSED, etc.), hide latent singleton noise unless user is actively searching
+      if (thread.isLatent && !searchQuery.trim()) {
+        return false;
+      }
+      // Status filter
+      if (statusFilter !== 'ALL' && thread.status !== statusFilter) {
+        return false;
+      }
     }
+
     // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -293,6 +316,21 @@ export const DashboardApp: React.FC = () => {
                 {filterKey === 'ALL' ? 'All Tasks' : filterKey === 'LIKELY_COMPLETE' ? 'Completed' : filterKey === 'ARCHIVED' ? 'Archived' : filterKey === 'ACTIVE' ? 'Active' : 'Paused'}
               </button>
             ))}
+            {latentCount > 0 && (
+              <button
+                aria-pressed={statusFilter === 'STANDALONE'}
+                onClick={() => setStatusFilter(statusFilter === 'STANDALONE' ? 'ALL' : 'STANDALONE')}
+                className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 ${
+                  statusFilter === 'STANDALONE'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-amber-300'
+                }`}
+                title="Isolated tabs awaiting a related tab to form an intent cluster"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                Standalone Tabs ({latentCount})
+              </button>
+            )}
           </div>
         </div>
 
@@ -329,6 +367,7 @@ export const DashboardApp: React.FC = () => {
                 onSetStatus={handleSetStatus}
                 onDelete={handleDeleteThread}
                 onSplit={t => setSelectedSplitThread(t)}
+                onPromote={handlePromoteLatent}
               />
             ))}
           </div>

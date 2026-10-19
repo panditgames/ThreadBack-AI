@@ -30,7 +30,8 @@ export const PopupApp: React.FC = () => {
       } else {
         const sorted = allThreads.sort((a, b) => b.updatedAt - a.updatedAt);
         setThreads(sorted);
-        const currentActive = sorted.find(t => t.status === 'ACTIVE') || sorted[0];
+        const visibleSorted = sorted.filter(t => !t.isLatent);
+        const currentActive = visibleSorted.find(t => t.status === 'ACTIVE') || visibleSorted[0];
         setActiveThread(currentActive || null);
       }
     } catch (err) {
@@ -197,7 +198,7 @@ export const PopupApp: React.FC = () => {
           </div>
           <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
             {threads
-              .filter(t => t.id !== activeThread?.id)
+              .filter(t => !t.isLatent && t.id !== activeThread?.id)
               .slice(0, 3)
               .map(thread => (
                 <div

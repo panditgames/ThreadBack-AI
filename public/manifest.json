@@ -2,13 +2,17 @@
   "manifest_version": 3,
   "name": "ThreadBack AI - Task & Intent Memory",
   "short_name": "ThreadBack",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Remembers what you were trying to accomplish across browser tabs, not merely which tabs you opened.",
   "permissions": [
     "tabs",
     "storage",
-    "alarms"
+    "alarms",
+    "offscreen"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self'"
+  },
   "background": {
     "service_worker": "serviceWorker.js",
     "type": "module"
@@ -30,5 +34,6 @@
   "options_ui": {
     "page": "dashboard.html",
     "open_in_tab": true
-  }
+  },
+  "minimum_chrome_version": "116"
 }

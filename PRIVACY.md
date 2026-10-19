@@ -1,3 +1,5 @@
+> **v1.2.0:** current architecture and verification are documented in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). Earlier dated test/engine notes below are historical.
+
 # ThreadBack AI privacy
 
 Tab metadata is processed locally. No telemetry, analytics, server, content script, or automatic external AI request is part of the extension workflow.
@@ -16,7 +18,7 @@ The collector excludes internal/extension protocols, non-HTTP(S) pages, incognit
 
 ## Local semantic model
 
-A tiny curated concept classifier is bundled with the extension. It reads only existing titles and genuinely observed search queries, in memory. Loading the JSON asset accesses the extension's own files, not a server. It collects no page bodies, cookies, forms or extra metadata, persists no embeddings/training examples, and adds no telemetry or permissions. Failure uses existing heuristics. No API key or remote inference is required. Browser-local storage remains unencrypted.
+The v1.2.0 engine bundles quantized BGE-small-en-v1.5, tokenizer/config and WASM assets. Remote model loading is disabled. It reads only bounded observed titles, genuine URL search queries; hostnames only remove exact branding, never supply semantic evidence, never page bodies, cookies, passwords or forms. Up to five metadata embedding vectors per thread and their normalized centroid are persisted in browser-local storage; these are browsing-derived data and are not application-encrypted. Inference uses a dedicated local worker in an offscreen extension document; this permission does not grant page-content access. Model connections are restricted to the extension origin. Erase closes the inference host and clears metadata caches. There is no training, backend, API key or telemetry. Failed inference preserves a separate latent candidate. Existing deletion and exclusion controls remain important.
 
 ## AI and network
 
@@ -28,4 +30,4 @@ Resume Task opens selected task URLs, making normal browser requests to those si
 
 Only tabs, storage and alarms are requested. History import, content injection and host permissions are absent. Tests cover defaults, deletion, exclusions, unsafe URLs, denied tab access and offline AI fallback. See HANDOFF.md for actual release results and browser limitations.
 
-TinySemanticClassifier is a second-stage, deterministic metadata resolver. It adds no network requests, backend, API key, telemetry, browser permissions, content extraction or persistent training examples. Domain strings cannot establish its semantic topic, and query context must match an observed search URL. Malformed input or classifier errors preserve the heuristic decision.
+In published v1.1.1, TinySemanticClassifier was a second-stage, deterministic metadata resolver. The remainder of this paragraph describes that historical engine. It adds no network requests, backend, API key, telemetry, browser permissions, content extraction or persistent training examples. Domain strings cannot establish its semantic topic, and query context must match an observed search URL. Malformed input or classifier errors preserve the heuristic decision.

@@ -44,7 +44,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
         </div>
 
         <p className="text-xs text-slate-300 mb-4">
-          ThreadBack groups pages using a deterministic weighted similarity model based on active browsing evidence. Captured signals for this thread:
+          New pages are compared by local BGE embeddings of observed metadata. The evidence below describes captured activity; keyword, domain and timing statistics do not decide membership.
         </p>
 
         {/* Evidence Points */}

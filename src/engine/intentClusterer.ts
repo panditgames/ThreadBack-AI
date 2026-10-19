@@ -1,13 +1,19 @@
 import { ActivityEvent, IntentStep, IntentThread, TabReference, ThreadStatus } from '../types';
-import { extractQueryKeywords, extractTitleKeywords, computeOverlapScore, hasTopicEvidence } from './keywords';
+import { extractQueryKeywords, extractTitleKeywords } from './keywords';
 import { inferNextAction } from './nextActionInferer';
-import { computeEventSimilarity } from './scoring';
 import { inferThreadStatus, hasCompletionEvidence } from './statusInferer';
 import { parseUrl } from './urlParser';
 import { generateWhyExplanation } from './whyExplainer';
-import { resolveIntentAmbiguity } from './localIntentClassifier';
+import { PAGE_THRESHOLD, CANDIDATE_MARGIN, decideSemanticAssignment, representativePages, reconciliationEvidence, RECONCILIATION_THRESHOLD } from './ai/semanticAssignment';
+import {
+  generateEmbedding,
+  formatPageMetadata,
+  centroidOf,
+  isValidEmbedding,
+  EMBEDDING_VERSION,
+} from './ai/localEmbedder';
 
-const CLUSTER_THRESHOLD = 0.40;
+export const CLUSTER_THRESHOLD = PAGE_THRESHOLD;
 
 export function deriveThreadTitle(
   events: ActivityEvent[],
@@ -237,18 +243,11 @@ export function deriveMilestoneSteps(
   return { completedSteps, unfinishedSteps };
 }
 
-interface ActiveSearchSession {
-  query: string;
-  queryTokens: string[];
-  tabId?: number;
-  timestamp: number;
-  threadId: string;
-}
 
 export class IntentEngine {
   private threads: Map<string, IntentThread> = new Map();
   private processedCounts = new Map<string, number>();
-  private activeSearchSessions: ActiveSearchSession[] = [];
+  private eventQueue: Promise<unknown> = Promise.resolve();
 
   constructor(initialThreads?: IntentThread[]) {
     if (initialThreads) {
@@ -256,10 +255,60 @@ export class IntentEngine {
         this.threads.set(t.id, t);
       }
     }
+    this.pruneLatentThreads();
   }
+
+  public static readonly MAX_LATENT_CANDIDATES = 50;
+  public static readonly LATENT_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
   public getThreads(): IntentThread[] {
     return Array.from(this.threads.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  public getActiveThreads(): IntentThread[] {
+    return this.getThreads().filter(t => !t.isLatent);
+  }
+
+  public getLatentThreads(): IntentThread[] {
+    return this.getThreads().filter(t => !!t.isLatent);
+  }
+
+  public promoteLatentThread(threadId: string): IntentThread | null {
+    const thread = this.threads.get(threadId);
+    if (!thread) return null;
+    const promoted: IntentThread = {
+      ...thread,
+      isLatent: false,
+      latentPromotionReason: 'MANUAL',
+      updatedAt: Date.now(),
+    };
+    this.threads.set(threadId, promoted);
+    return promoted;
+  }
+
+  public pruneLatentThreads(
+    maxAgeMs = IntentEngine.LATENT_EXPIRATION_MS,
+    maxCount = IntentEngine.MAX_LATENT_CANDIDATES
+  ): void {
+    const now = Date.now();
+    for (const thread of Array.from(this.threads.values())) {
+      if (thread.isLatent && thread.status !== 'LIKELY_COMPLETE' && thread.status !== 'ARCHIVED' && (now - thread.updatedAt > maxAgeMs)) {
+        this.threads.delete(thread.id);
+        this.processedCounts.delete(thread.id);
+      }
+    }
+
+    const latentThreads = Array.from(this.threads.values())
+      .filter(t => !!t.isLatent && t.status !== 'LIKELY_COMPLETE' && t.status !== 'ARCHIVED')
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+
+    if (latentThreads.length > maxCount) {
+      const toEvict = latentThreads.slice(maxCount);
+      for (const t of toEvict) {
+        this.threads.delete(t.id);
+        this.processedCounts.delete(t.id);
+      }
+    }
   }
 
   public getThread(id: string): IntentThread | undefined {
@@ -267,7 +316,6 @@ export class IntentEngine {
   }
 
   public setThreads(threads: IntentThread[]): void {
-    this.activeSearchSessions = this.activeSearchSessions.filter(session => threads.some(t => t.id === session.threadId && t.status !== 'ARCHIVED'));
     this.threads.clear();
     for (const id of this.processedCounts.keys()) {
       if (!threads.some(thread => thread.id === id)) this.processedCounts.delete(id);
@@ -275,172 +323,153 @@ export class IntentEngine {
     for (const t of threads) {
       this.threads.set(t.id, t);
     }
+    this.pruneLatentThreads();
   }
 
-  private recordSearchSession(event: ActivityEvent, threadId: string): void {
-    // Only an observed query on a search URL can establish context.
-    const query = parseUrl(event.url).searchQuery;
-    if (!query || query !== event.searchQuery) return;
-    const queryTokens = extractQueryKeywords(query);
-    if (!queryTokens.length) return;
-    const cutoff = event.timestamp - 20 * 60 * 1000;
-    this.activeSearchSessions = this.activeSearchSessions.filter(s => s.timestamp >= cutoff && !(s.tabId === event.tabId && s.threadId === threadId && s.query === query));
-    this.activeSearchSessions.unshift({ query, queryTokens, tabId: event.tabId, timestamp: event.timestamp, threadId });
-    this.activeSearchSessions = this.activeSearchSessions.slice(0, 32);
-  }
-
-  private findMatchingSearchSession(event: ActivityEvent, eventTokens: string[]): ActiveSearchSession | undefined {
-    let best: ActiveSearchSession | undefined;
-    let bestScore = 0;
-    for (const session of this.activeSearchSessions) {
-      const age = event.timestamp - session.timestamp;
-      const thread = this.threads.get(session.threadId);
-      if (age < 0 || age > 20 * 60 * 1000 || !thread || thread.status === 'ARCHIVED') continue;
-      if (!thread.events.some(e => e.searchQuery === session.query && e.tabId === session.tabId)) continue;
-      const shared = session.queryTokens.filter(t => eventTokens.includes(t));
-      if (!hasTopicEvidence(shared)) continue;
-      const score = computeOverlapScore(session.queryTokens, eventTokens).score;
-      if (score > bestScore) { best = session; bestScore = score; }
-    }
-    return best;
-  }
+  public static readonly JOIN_THRESHOLD = CLUSTER_THRESHOLD;
 
   /**
-   * Incrementally process a single ActivityEvent
+   * Process a single ActivityEvent using the local AI embedding model as the primary decision engine.
+   * Every new page/tab segregation decision is evaluated primarily by the local BGE model.
    */
-  public processEvent(event: ActivityEvent): IntentThread | null {
+  public processEvent(event: ActivityEvent): Promise<IntentThread | null> {
+    const result = this.eventQueue.then(() => this.assignEvent(event));
+    this.eventQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private async ensureCentroid(thread: IntentThread): Promise<number[]> {
+    if (thread.embeddingModelVersion === EMBEDDING_VERSION &&
+        isValidEmbedding(thread.centroidEmbedding) && thread.semanticPages?.length &&
+        thread.semanticPages.length <= 5 && thread.semanticPages.every(page => isValidEmbedding(page.vector))) return thread.centroidEmbedding;
+    // Bounded to max 5 representative entries; only observed metadata defines membership
+    const pages: NonNullable<IntentThread['semanticPages']> = [];
+    for (const tab of (thread.tabs.length <= 5 ? thread.tabs : [thread.tabs[0], ...thread.tabs.slice(-4)])) {
+      if (!parseUrl(tab.url).isValid) continue;
+      pages.push({ url: tab.url.split('#')[0], vector: await generateEmbedding(
+        formatPageMetadata(tab)) });
+    }
+    thread.semanticPages = pages;
+    thread.embeddingModelVersion = EMBEDDING_VERSION;
+    thread.centroidEmbedding = centroidOf(pages.map(page => page.vector));
+    return thread.centroidEmbedding;
+  }
+
+  private async assignEvent(event: ActivityEvent): Promise<IntentThread | null> {
     if (event.isInternalBrowserPage || !event.url || !parseUrl(event.url).isValid || !Number.isFinite(event.timestamp)) {
       return null;
     }
 
-    event = { ...event, title: event.title || event.domain || '' };
-    // Route closure and repeated activation to their known page, without reclustering.
+    this.pruneLatentThreads();
+    const parsed = parseUrl(event.url);
+    event = { ...event, title: typeof event.title === 'string' ? event.title.slice(0, 1000) : '',
+      domain: parsed.domain, searchQuery: parsed.searchQuery };
+    // Non-intent lifecycle: Route closure and repeated activation to their known page, without reclustering.
     for (const thread of this.threads.values()) {
       if (thread.events.some(e => e.id === event.id)) return thread;
-      if (thread.tabs.some(t => t.url.split('#')[0] === event.url.split('#')[0])) {
-        this.recordSearchSession(event, thread.id);
+      const knownTab = thread.tabs.find(t => t.url.split('#')[0] === event.url.split('#')[0]);
+      if (knownTab) {
+        // An incomplete singleton had no stable purpose yet. Re-evaluate its real title without losing old events.
+        if (thread.isLatent && thread.status !== 'LIKELY_COMPLETE' && thread.status !== 'ARCHIVED' && thread.tabs.length === 1 && event.eventType !== 'tab_closed' &&
+            event.title && knownTab.title !== event.title) {
+          this.threads.delete(thread.id);
+          const assigned = await this.assignEvent(event);
+          if (!assigned) { this.threads.set(thread.id, thread); return thread; }
+          if (assigned.isLatent) {
+            this.threads.delete(assigned.id);
+            assigned.id = thread.id; assigned.createdAt = thread.createdAt;
+            assigned.events = [...new Map([...thread.events, ...assigned.events].map(e => [e.id, e])).values()]
+              .sort((a, b) => a.timestamp - b.timestamp).slice(-100);
+            assigned.evidence = generateWhyExplanation(assigned.events, assigned.tabs);
+            this.threads.set(assigned.id, assigned);
+            return assigned;
+          }
+          const pages = assigned.semanticPages;
+          const centroid = assigned.centroidEmbedding;
+          this.threads.set(thread.id, thread);
+          const merged = this.mergeThreads(assigned.id, thread.id, false)!;
+          merged.semanticPages = pages; merged.centroidEmbedding = centroid; merged.embeddingModelVersion = EMBEDDING_VERSION;
+          this.threads.set(merged.id, merged);
+          return merged;
+        }
+        if (event.eventType !== 'tab_closed' && event.title && knownTab.title !== event.title) {
+          thread.centroidEmbedding = undefined; thread.semanticPages = undefined; thread.embeddingModelVersion = undefined;
+        }
         return this.addEventToThread(thread, event, thread.confidence);
       }
     }
     if (event.eventType === 'tab_closed') return null;
 
-    let bestThread: IntentThread | null = null;
-    let highestScore = 0;
+    // AI-FIRST CLUSTERING PATH:
+    // 1. Extract SAFE metadata only: clean page title, domain, authentic search query.
+    // ZERO body scraping, ZERO DOM extraction, ZERO cookies, ZERO passwords.
+    const safeText = formatPageMetadata(event);
 
-    // Pre-extract tokens once for all comparisons
-    const titleTokens = extractTitleKeywords(event.title);
-    const queryTokens = extractQueryKeywords(event.searchQuery);
-    const allTokens = [...new Set([...titleTokens, ...queryTokens])];
+    // 2. Generate normalized 384-dimensional embedding via local quantized bge-small-en-v1.5
+    let eventEmbedding: number[];
+    try {
+      eventEmbedding = await generateEmbedding(safeText);
+    } catch {
+      // Preserve the event without guessing membership when the local runtime fails.
+      return this.createNewThread(event);
+    }
 
-    // Check against active search sessions for contextual bridging (e.g. Ctrl+click or Right-click new tab)
-    const recentSearch = !event.searchQuery ? this.findMatchingSearchSession(event, allTokens) : undefined;
-    // Context changes a match score, never the observed event or its searchQuery.
-    const bridgedThread = recentSearch ? this.threads.get(recentSearch.threadId) : undefined;
-
-    // Compare with non-archived threads (focus on active/recent or keyword-relevant)
+    const available: IntentThread[] = [];
     for (const thread of this.threads.values()) {
       if (thread.status === 'ARCHIVED') continue;
-
-      const timeDiff = Math.abs(event.timestamp - thread.updatedAt);
-      const isRecent = timeDiff <= 48 * 3600 * 1000;
-      const sharedWithThread = allTokens.filter(t => thread.keywords.includes(t));
-
-      // Fast skip if thread is days apart with zero shared keywords
-      if (!isRecent && sharedWithThread.length === 0) {
-        continue;
-      }
-
-      // Gather candidate events: anchor, search queries, opener parent, and recent events
-      const candidateEvents = new Map<string, ActivityEvent>();
-      if (thread.events[0]) candidateEvents.set(thread.events[0].id, thread.events[0]);
-      for (const se of thread.events.filter(e => e.searchQuery)) candidateEvents.set(se.id, se);
-      if (event.openerTabId) {
-        const parent = thread.events.find(e => e.tabId === event.openerTabId);
-        if (parent) candidateEvents.set(parent.id, parent);
-      }
-      for (const re of thread.events.slice(-4)) candidateEvents.set(re.id, re);
-
-      for (const pastEvent of candidateEvents.values()) {
-        const sim = computeEventSimilarity(event, pastEvent);
-        if (sim.totalScore > highestScore) {
-          highestScore = sim.totalScore;
-          bestThread = thread;
-        }
-      }
-
-      // Contextual bridge bonus: if this thread owns the active search session
-      if (bridgedThread && bridgedThread.id === thread.id && isRecent) {
-        const bridgeScore = 0.52 + (sharedWithThread.length * 0.08);
-        if (bridgeScore > highestScore) {
-          highestScore = Math.min(0.95, bridgeScore);
-          bestThread = thread;
-        }
-      }
-
-      // Direct thread title overlap
-      const threadTitleTokens = extractTitleKeywords(thread.title);
-      const titleOverlap = computeOverlapScore(allTokens, threadTitleTokens);
-      const isShortGap = timeDiff <= 30 * 60 * 1000;
-
-      if (hasTopicEvidence(titleOverlap.sharedTokens) && titleOverlap.score >= 0.40 && (isShortGap || sharedWithThread.length >= 2 || titleOverlap.score >= 0.55)) {
-        const titleScore = 0.48 + (titleOverlap.score * 0.35);
-        if (titleScore > highestScore) {
-          highestScore = Math.min(0.95, titleScore);
-          bestThread = thread;
-        }
-      }
-
-      // Distinctive keyword matching:
-      // Require 2+ shared keywords for general multi-hour clustering, or 1 distinctive keyword within immediate session (30 mins)
-      const distinctiveShared = sharedWithThread.filter(t => hasTopicEvidence([t]));
-      if (sharedWithThread.length >= 2 && isRecent) {
-        const keywordScore = 0.45 + (sharedWithThread.length * 0.08);
-        if (keywordScore > highestScore) {
-          highestScore = Math.min(0.95, keywordScore);
-          bestThread = thread;
-        }
-      } else if (distinctiveShared.length >= 1 && isShortGap) {
-        const singleScore = 0.42 + (distinctiveShared.length * 0.08);
-        if (singleScore > highestScore) {
-          highestScore = Math.min(0.85, singleScore);
-          bestThread = thread;
-        }
-      }
+      try { await this.ensureCentroid(thread); available.push(thread); } catch { /* Retain unavailable state without guessing. */ }
     }
+    const assignment = decideSemanticAssignment(eventEmbedding, available);
+    const targetThread = assignment?.thread;
+    const matchScore = assignment?.score || 0;
 
-    // Second-Stage Ambiguity Resolver (Middle-confidence band: 0.25 <= score < 0.50)
-    // Clear high confidence (>= 0.50): join directly
-    // Clear low confidence (< 0.25): create separate thread directly
-    // Ambiguity band (0.25 <= score < 0.50): consult second-stage classifier
-    if (bestThread && highestScore >= 0.25 && highestScore < 0.50) {
-      try {
-        const ambiguityResult = resolveIntentAmbiguity(event, bestThread);
-        if (ambiguityResult.source === 'tiny_semantic' && ambiguityResult.ambiguityResolved && Number.isFinite(ambiguityResult.confidence) && ambiguityResult.confidence >= 0.65 && ambiguityResult.decision === 'RELATED') {
-          // Promote match score to cleanly join the candidate thread
-          highestScore = Math.max(highestScore, 0.52);
-        } else if (ambiguityResult.source === 'tiny_semantic' && ambiguityResult.ambiguityResolved && Number.isFinite(ambiguityResult.confidence) && ambiguityResult.confidence >= 0.65 && ambiguityResult.decision === 'UNRELATED') {
-          // Explicit false-positive separation: suppress match score below threshold
-          highestScore = Math.min(highestScore, 0.30);
-        }
-      } catch {
-        // Fallback: preserve original heuristic highestScore
+    if (targetThread) {
+      const cleanUrl = event.url.split('#')[0];
+      const pages = targetThread.semanticPages ? [...targetThread.semanticPages] : [];
+      const existingIndex = pages.findIndex(p => p.url === cleanUrl);
+      if (existingIndex !== -1) {
+        pages[existingIndex] = { url: cleanUrl, vector: eventEmbedding };
+      } else {
+        pages.push({ url: cleanUrl, vector: eventEmbedding });
       }
-    }
+      targetThread.semanticPages = representativePages(pages);
+      targetThread.centroidEmbedding = centroidOf(targetThread.semanticPages.map(page => page.vector));
+      targetThread.embeddingModelVersion = EMBEDDING_VERSION;
 
-    if (bestThread && highestScore >= CLUSTER_THRESHOLD) {
-      if (event.searchQuery) {
-        this.recordSearchSession(event, bestThread.id);
-      }
-      // Append event to matched thread
-      return this.addEventToThread(bestThread, event, highestScore);
+      const updated = this.addEventToThread(
+        targetThread,
+        { ...event, semanticSimilarity: matchScore, semanticThreshold: IntentEngine.JOIN_THRESHOLD },
+        matchScore
+      );
+      return this.reconcileSemanticWorkflows(updated, event.id);
     } else {
-      // Create new IntentThread
-      const newThread = this.createNewThread(event);
-      if (event.searchQuery && newThread) {
-        this.recordSearchSession(event, newThread.id);
-      }
+      // Create new IntentThread with initial centroid (starts as LATENT to avoid singleton clutter)
+      const newThread = this.createNewThread(event, eventEmbedding);
       return newThread;
     }
+  }
+
+  private reconcileSemanticWorkflows(thread: IntentThread, eventId: string): IntentThread {
+    if (thread.isLatent) return thread;
+    const matches = this.getThreads().filter(t => t.id !== thread.id && t.status !== 'ARCHIVED')
+      .map(t => reconciliationEvidence(t, thread)).filter((m): m is NonNullable<typeof m> => !!m)
+      .sort((a, b) => b.similarity - a.similarity);
+    const best = matches[0];
+    if (!best || (matches[1] && best.similarity - matches[1].similarity < CANDIDATE_MARGIN)) return thread;
+    const pages = representativePages([...(best.older.semanticPages || []), ...(best.newer.semanticPages || [])]);
+    const merged = this.mergeThreads(best.older.id, best.newer.id, false)!;
+    merged.semanticPages = pages;
+    merged.centroidEmbedding = centroidOf(pages.map(p => p.vector));
+    merged.embeddingModelVersion = EMBEDDING_VERSION;
+    merged.events = merged.events.map(event => event.id === eventId ? {
+      ...event, semanticSimilarity: best.similarity, semanticThreshold: RECONCILIATION_THRESHOLD,
+      semanticMatchKind: 'WORKFLOW' as const,
+    } : event);
+    merged.evidence = generateWhyExplanation(merged.events, merged.tabs);
+    const title = deriveThreadTitle(merged.events, merged.isManualCorrection ? merged.title : undefined);
+    merged.title = title.title; merged.summary = title.summary;
+    this.threads.set(merged.id, merged);
+    return merged;
   }
 
   private addEventToThread(
@@ -459,7 +488,7 @@ export class IntentEngine {
         ...updatedTabs[existingTabIndex],
         tabId: event.tabId,
         windowId: event.windowId,
-        title: event.title || updatedTabs[existingTabIndex].title,
+        title: event.eventType === 'tab_closed' ? updatedTabs[existingTabIndex].title : (event.title || updatedTabs[existingTabIndex].title),
         lastAccessed: event.timestamp,
         isClosed: event.eventType === 'tab_closed',
       };
@@ -511,6 +540,15 @@ export class IntentEngine {
       ? generateWhyExplanation(updatedEvents, updatedTabs)
       : thread.evidence;
 
+    const isNowPromoted = thread.isLatent && (
+      new Set(updatedTabs.map(tab => tab.url.split('#')[0])).size > 1 ||
+      thread.latentPromotionReason === 'MULTI_TAB_MATCH'
+    );
+    const isLatent = isNowPromoted ? false : (thread.isLatent ?? (updatedTabs.length <= 1));
+    const latentPromotionReason = isNowPromoted
+      ? (thread.latentPromotionReason || (updatedTabs.length > 1 ? 'MULTI_TAB_MATCH' : 'SUBSEQUENT_NAVIGATION'))
+      : thread.latentPromotionReason;
+
     const updatedThread: IntentThread = {
       ...thread,
       title: titleInfo.title,
@@ -525,13 +563,17 @@ export class IntentEngine {
       nextAction,
       status,
       evidence,
+      isLatent,
+      latentPromotionReason,
     };
 
     this.threads.set(updatedThread.id, updatedThread);
     return updatedThread;
   }
 
-  private createNewThread(initialEvent: ActivityEvent): IntentThread {
+  private createNewThread(initialEvent: ActivityEvent, initialEmbedding?: number[]): IntentThread {
+    this.pruneLatentThreads();
+
     const threadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const events = [initialEvent];
     const tabs: TabReference[] = [
@@ -575,9 +617,15 @@ export class IntentEngine {
       unfinishedSteps,
       nextAction,
       evidence,
+      centroidEmbedding: initialEmbedding,
+      embeddingModelVersion: EMBEDDING_VERSION,
+      semanticPages: initialEmbedding ? [{ url: initialEvent.url.split('#')[0], vector: initialEmbedding }] : [],
+      isLatent: true,
+      latentPromotionReason: initialEvent.searchQuery ? 'SEARCH_INTENT' : undefined,
     };
 
     this.threads.set(threadId, newThread);
+    this.pruneLatentThreads();
     return newThread;
   }
 
@@ -605,6 +653,8 @@ export class IntentEngine {
     const updated: IntentThread = {
       ...thread,
       status,
+      isLatent: false,
+      latentPromotionReason: thread.isLatent ? 'MANUAL' : thread.latentPromotionReason,
       updatedAt: Date.now(),
     };
     this.threads.set(threadId, updated);
@@ -615,7 +665,7 @@ export class IntentEngine {
     return this.threads.delete(threadId);
   }
 
-  public mergeThreads(targetThreadId: string, sourceThreadId: string): IntentThread | null {
+  public mergeThreads(targetThreadId: string, sourceThreadId: string, manual = true): IntentThread | null {
     if (targetThreadId === sourceThreadId) return null;
     const target = this.threads.get(targetThreadId);
     const source = this.threads.get(sourceThreadId);
@@ -644,6 +694,8 @@ export class IntentEngine {
 
     const mergedThread: IntentThread = {
       ...target,
+      centroidEmbedding: undefined, semanticPages: undefined, embeddingModelVersion: undefined,
+      isLatent: false, latentPromotionReason: manual ? 'MANUAL' : 'MULTI_TAB_MATCH',
       updatedAt: Date.now(),
       tabs: mergedTabs,
       events: mergedEvents,
@@ -652,7 +704,8 @@ export class IntentEngine {
       unfinishedSteps,
       nextAction,
       evidence,
-      isManualCorrection: true,
+      isManualCorrection: manual || target.isManualCorrection,
+      preserveSemanticBoundary: manual ? false : target.preserveSemanticBoundary || source.preserveSemanticBoundary,
     };
 
     this.threads.set(targetThreadId, mergedThread);
@@ -684,6 +737,8 @@ export class IntentEngine {
     // Update source
     const updatedSource: IntentThread = {
       ...source,
+      preserveSemanticBoundary: true,
+      centroidEmbedding: undefined, semanticPages: undefined, embeddingModelVersion: undefined,
       tabs: remainingTabs,
       events: remainingEvents,
       keywords: [...new Set(remainingEvents.flatMap(e => [...extractTitleKeywords(e.title), ...extractQueryKeywords(e.searchQuery)]))],
@@ -704,6 +759,7 @@ export class IntentEngine {
 
     const newThread: IntentThread = {
       id: newThreadId,
+      preserveSemanticBoundary: true,
       title,
       summary,
       createdAt: extractedTabs[0]?.lastAccessed || Date.now(),

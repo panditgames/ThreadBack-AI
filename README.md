@@ -48,9 +48,9 @@ No black boxes. Clicking **"Why?"** on any thread displays transparent mathemati
 - Temporal proximity (e.g. visited within 6 minutes).
 - Opener and navigation chains.
 
-A tiny bundled **local semantic intent scorer** supplements uncertain heuristic matches. Its curated concept/synonym classifier runs offline on titles and genuinely observed queries; no LLM, model download, backend, API key or telemetry is involved. It requires multiple specific cues, abstains on unknown/mixed topics, and falls back to heuristics if its local asset is missing or invalid. It is limited English concept coverage, not general semantic understanding.
+Version 1.2.0 uses bundled quantized **Xenova/bge-small-en-v1.5** embeddings for new-page membership. It uniformly ranks workflows and latent candidates using a centroid and up to five observed page vectors. Corroborated multi-page workflows can reconcile while preserving the original purpose anchor. Inference is local and offline; no API key, backend, telemetry or page-body collection is added. A failed inference preserves the event as a separate latent candidate.
 
-TinySemanticClassifier additionally resolves middle-confidence candidates (0.25–0.50) using bounded metadata concepts and subword features. It invokes no remote service or additional model fetch; unsupported/error results retain the original heuristic decision. Confidence values are heuristic scores rather than calibrated probabilities.
+New isolated pages remain latent until a different semantically related page joins or the user promotes them. The semantic support floor is 0.67, with relative ranking and no keyword, website, domain or opener join bonuses. Local inference runs in a dedicated worker hosted by an offscreen extension document (Chrome/Edge 116+). See [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md) for current verification and limitations; v1.1.1 results below describe the earlier engine.
 
 ### 3. 🗺️ Structured Intent Graph
 Visualizes your task progression as a Directed Acyclic Graph (DAG) with:
@@ -177,7 +177,7 @@ npx vitest run
 - **Unit Tests**: Title tokenization, query extraction, multi-signal scoring weights, temporal proximity bands, and domain normalization.
 - **Adversarial & Edge Cases**: Empty tab sessions, rapid burst of 200 concurrent events, malformed URLs, and storage corruption resilience.
 - **Large-scale benchmark**: Includes 10,000 events with a 90-second engine processing budget. Browser rendering performance is separate.
-- **Security/privacy audit**: Checks secrets, minimal permissions (tabs, storage, alarms), and privacy defaults.
+- **Security/privacy audit**: Checks secrets, minimal permissions (tabs, storage, alarms, offscreen), and privacy defaults.
 - **UI & Workflow Tests**: Component rendering, substring filtering, modal interactions, and end-to-end judge hero workflows.
 
 ---
@@ -197,19 +197,22 @@ Created for EurekaDev 2026. No license file has been provided.
 
 - tabs: capture metadata and restore relevant URLs.
 - storage: persist tasks and settings locally.
-- alarms: synchronize saved state periodically. No host permissions or content scripts.
+- alarms: synchronize saved state periodically.
+- offscreen: host the bundled local inference worker; no page-content access.
+
+No host permissions or content scripts are requested.
 
 Open Dashboard and click **Demo Data**, then inspect the three synthetic cards using Timeline, Why?, Graph, Resume Task, search, and the card menu to complete/archive a task. Demo Data replaces saved threads. Use a separate browser profile for evaluation. Demo URLs are illustrative and some require login or may no longer resolve. Web preview shows briefings but cannot restore browser tabs.
 
 URLs and titles can contain personal data. Domain exclusions apply to future events; clear existing data separately. Browser storage is not application-encrypted. Search uses substring matching.
 
-AI assistance disclosure: Antigravity generated the initial implementation. OpenAI Codex assisted final QA, targeted debugging, regression tests and documentation corrections. Runtime intent inference uses deterministic local heuristics.
+AI assistance disclosure: Antigravity generated the initial implementation. OpenAI Codex completed the final semantic engine integration, runtime debugging, QA, regression tests and release documentation. The v1.2.0 engine uses local BGE embeddings; deterministic rules still generate task labels, milestones and status suggestions.
 
 ## Release and troubleshooting
 
 See [SUBMISSION.md](SUBMISSION.md), [SUBMISSION_CHECKLIST.md](SUBMISSION_CHECKLIST.md), [DEMO_SCRIPT.md](DEMO_SCRIPT.md) and [HANDOFF.md](HANDOFF.md). Use Node.js 22 LTS, npm ci and npm run build; node scripts/verifyExtension.js checks packaging. CI runs the seven documented verification commands on pushes and pull requests.
 
-Bundled Chromium unpacked-extension testing passed with real browser APIs, controlled pages and an isolated persistent profile. Vitest also uses mocked APIs; those are separate evidence. Installed Chrome/Edge distributions have not been independently qualified. No native side panel is registered.
+Current v1.2.0 browser evidence and its limits are recorded in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). The reproducible smoke uses the actual unpacked extension, real APIs, controlled pages and an isolated persistent Chromium profile. Vitest also uses mocked APIs; those are separate evidence. Installed Chrome/Edge distributions have not been independently qualified. No native side panel is registered.
 
 If Load unpacked fails, select the folder containing manifest.json (built dist, not source). After rebuilding, click Reload on the extension card and reopen popup/dashboard. Open Dashboard from the popup or Details → Extension options. If cards are empty, use Demo Data in a separate test profile; it replaces threads. Resume may open external login pages. Excluded/local/internal pages are intentionally not tracked. Inspect service-worker errors from the extension card without sharing personal URLs or keys.
 

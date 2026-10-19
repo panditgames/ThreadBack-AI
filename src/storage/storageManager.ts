@@ -1,8 +1,10 @@
 import { generateWhyExplanation } from '../engine/whyExplainer';
-import { AISettings, IntentThread, PrivacySettings, ThreadBackStorageData } from '../types';
+import { ActivityEvent, AISettings, IntentThread, PrivacySettings, ThreadBackStorageData } from '../types';
 
 export const STORAGE_KEY = 'threadback_data_v1';
 const CURRENT_VERSION = 1;
+const PENDING_PREFIX = 'threadback_pending_v1:';
+const ERASE_KEY = 'threadback_erase_before_v1';
 
 export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   allowPageContentAnalysis: false, // OFF by default
@@ -26,6 +28,7 @@ export const INITIAL_STORAGE_STATE: ThreadBackStorageData = {
   privacy: DEFAULT_PRIVACY_SETTINGS,
   aiSettings: DEFAULT_AI_SETTINGS,
   lastProcessedTimestamp: 0,
+  pendingEvents: [],
 };
 
 export class StorageManager {
@@ -66,6 +69,7 @@ export class StorageManager {
       }
     } catch (err) {
       console.error('[ThreadBack Storage] Failed to save state:', err);
+      throw err;
     }
   }
 
@@ -102,18 +106,62 @@ export class StorageManager {
     await this.save(data);
   }
 
-  public async clearBrowsingIntelligence(): Promise<void> {
+  public async getPendingEvents(): Promise<ActivityEvent[]> {
     const data = await this.load();
-    data.events = [];
-    data.threads = {};
-    data.activeThreadId = undefined;
-    data.lastProcessedTimestamp = Date.now();
+    const legacy = Array.isArray(data.pendingEvents) ? data.pendingEvents : [];
+    if (!this.isChromeStorageAvailable()) return [...legacy];
+    const stored = await chrome.storage.local.get(null);
+    const erasedBefore = Number(stored[ERASE_KEY]) || 0;
+    const pending = Object.entries(stored).filter(([key]) => key.startsWith(PENDING_PREFIX)).map(([, value]) => value as ActivityEvent);
+    return [...new Map([...legacy, ...pending].filter(event => event && typeof event.id === 'string' &&
+      typeof event.url === 'string' && Number.isFinite(event.timestamp) && event.timestamp >= erasedBefore)
+      .map(event => [event.id, event])).values()].sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  public async addPendingEvent(event: ActivityEvent): Promise<void> {
+    if (this.isChromeStorageAvailable()) {
+      // Independent keys cannot be overwritten by concurrent UI/thread snapshots.
+      await chrome.storage.local.set({ [PENDING_PREFIX + event.id]: event });
+      return;
+    }
+    const data = await this.load();
+    data.pendingEvents = [...(data.pendingEvents || []).filter(e => e.id !== event.id), event];
     await this.save(data);
   }
 
+  public async resolvePendingEvent(eventId: string, updatedThreads?: IntentThread[]): Promise<boolean> {
+    const pending = (await this.getPendingEvents()).some(event => event.id === eventId);
+    const data = await this.load();
+    if (updatedThreads && pending) {
+      data.threads = Object.fromEntries(updatedThreads.map(thread => [thread.id, thread]));
+      data.lastProcessedTimestamp = Date.now();
+    }
+    const hadLegacy = data.pendingEvents?.some(event => event.id === eventId);
+    data.pendingEvents = (data.pendingEvents || []).filter(event => event.id !== eventId);
+    if ((updatedThreads && pending) || hadLegacy) await this.save(data);
+    // Remove only after thread persistence succeeds. A crash before removal replays idempotently.
+    if (this.isChromeStorageAvailable()) await chrome.storage.local.remove(PENDING_PREFIX + eventId);
+    return pending;
+  }
+
+  private async persistErasure(data: ThreadBackStorageData): Promise<void> {
+    if (!this.isChromeStorageAvailable()) { await this.save(data); return; }
+    const erasedBefore = Date.now();
+    data.lastProcessedTimestamp = erasedBefore;
+    this.inMemoryFallback = data;
+    await chrome.storage.local.set({ [STORAGE_KEY]: data, [ERASE_KEY]: erasedBefore });
+    const stored = await chrome.storage.local.get(null);
+    const keys = Object.keys(stored).filter(key => key.startsWith(PENDING_PREFIX) && stored[key]?.timestamp <= erasedBefore);
+    if (keys.length) await chrome.storage.local.remove(keys);
+  }
+
+  public async clearBrowsingIntelligence(): Promise<void> {
+    const data = await this.load();
+    await this.persistErasure({ ...data, events: [], threads: {}, activeThreadId: undefined, pendingEvents: [] });
+  }
+
   public async clearAllData(): Promise<void> {
-    // Persist an empty tombstone so reload cannot silently restore the demo.
-    await this.save({ ...structuredClone(INITIAL_STORAGE_STATE), lastProcessedTimestamp: Date.now() });
+    await this.persistErasure(structuredClone(INITIAL_STORAGE_STATE));
   }
 
   private validateAndMigrate(data: any): ThreadBackStorageData {
@@ -142,6 +190,8 @@ export class StorageManager {
         unfinishedSteps: (Array.isArray(candidate.unfinishedSteps) ? candidate.unfinishedSteps : []).filter((step: any) => step && typeof step.title === 'string' && Array.isArray(step.evidence)),
         nextAction: candidate.nextAction && typeof candidate.nextAction.actionText === 'string' ? candidate.nextAction : { actionText: 'Review task tabs', confidence: 'Possibly', rationale: 'Recovered saved state' },
         evidence: generateWhyExplanation(events, tabs),
+        isLatent: typeof candidate.isLatent === 'boolean' ? candidate.isLatent : false,
+        latentPromotionReason: candidate.latentPromotionReason,
       };
     }
     return {
@@ -162,6 +212,7 @@ export class StorageManager {
         customEndpoint: data.aiSettings?.customEndpoint || '',
       },
       lastProcessedTimestamp: typeof data.lastProcessedTimestamp === 'number' ? data.lastProcessedTimestamp : 0,
+      pendingEvents: (Array.isArray(data.pendingEvents) ? data.pendingEvents : []).filter((e: any) => e && typeof e.id === 'string' && typeof e.url === 'string'),
     };
   }
 }

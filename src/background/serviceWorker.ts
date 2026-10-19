@@ -1,16 +1,34 @@
-import { localSemanticModel } from '../engine/localSemantic';
+import { getLocalModelStatus, getModelDiagnostics, clearLocalModelState } from '../engine/ai/localEmbedder';
 import { ActivityCollector } from '../collector/activityCollector';
 import { createDemoDataset } from '../demo/demoDataset';
 import { IntentEngine } from '../engine/intentClusterer';
 import { detectInterruption } from '../engine/interruption';
 import { executeResumeTask } from '../engine/resumeSelector';
 import { DEFAULT_PRIVACY_SETTINGS, STORAGE_KEY, storageManager } from '../storage/storageManager';
-import { ActivityEvent } from '../types';
+import { parseUrl } from '../engine/urlParser';
+import { ActivityEvent, PrivacySettings } from '../types';
 
 const intentEngine = new IntentEngine();
 let activityCollector: ActivityCollector | null = null;
 let isInitialized = false;
 let initialization: Promise<void> | undefined;
+let captureReady!: () => void;
+const privacyReady = new Promise<void>(resolve => { captureReady = resolve; });
+
+async function captureDurably(event: ActivityEvent): Promise<void> {
+  await privacyReady;
+  if (!await canReplay(event)) return;
+  await storageManager.addPendingEvent(event);
+  void serialize(async () => { await initialize(); await handleActivityEvent(event); });
+}
+
+async function canReplay(event: ActivityEvent): Promise<boolean> {
+  const data = await storageManager.load();
+  const privacy: PrivacySettings = data.privacy || DEFAULT_PRIVACY_SETTINGS;
+  const collector = new ActivityCollector(() => {}, privacy);
+  const parsed = parseUrl(event.url);
+  return parsed.isValid && !collector.isDomainExcluded(parsed.domain);
+}
 // Order engine mutations and saved-state synchronization so an older read cannot
 // overwrite a newer captured event while asynchronous storage writes complete.
 let pendingOperation: Promise<unknown> = Promise.resolve();
@@ -24,11 +42,27 @@ function initialize(): Promise<void> {
   return initialization ??= initializeOnce();
 }
 
+async function replayPendingEvents(): Promise<number> {
+  const pendingEvents = await storageManager.getPendingEvents();
+  if (pendingEvents.length > 0) {
+    console.log(`[ThreadBack Service Worker] Replaying ${pendingEvents.length} unresolved pending events...`);
+    for (const pending of pendingEvents) {
+      try {
+        if (!await canReplay(pending)) { await storageManager.resolvePendingEvent(pending.id); continue; }
+        await intentEngine.processEvent(pending);
+        await storageManager.resolvePendingEvent(pending.id, intentEngine.getThreads());
+      } catch (replayErr) {
+        console.error('[ThreadBack Service Worker] Error replaying pending event:', replayErr);
+      }
+    }
+  }
+  return pendingEvents.length;
+}
+
 async function initializeOnce() {
   if (isInitialized) return;
 
   try {
-    await localSemanticModel.load();
     const data = await storageManager.load();
     const existingThreads = Object.values(data.threads);
 
@@ -41,9 +75,14 @@ async function initializeOnce() {
       intentEngine.setThreads(existingThreads);
     }
 
+    activityCollector?.updatePrivacySettings(data.privacy || DEFAULT_PRIVACY_SETTINGS);
+    captureReady();
+
+    // Replay any unresolved pending events from a prior worker restart/termination
+    await replayPendingEvents();
+
     // Initialize activity collector
-    activityCollector = new ActivityCollector(event => { void serialize(() => handleActivityEvent(event)); }, data.privacy || DEFAULT_PRIVACY_SETTINGS);
-    activityCollector.startListening();
+
 
     isInitialized = true;
     console.log('[ThreadBack Service Worker] Initialized with', intentEngine.getThreads().length, 'threads');
@@ -54,10 +93,17 @@ async function initializeOnce() {
 
 async function handleActivityEvent(event: ActivityEvent) {
   try {
-    const updatedThread = intentEngine.processEvent(event);
+    // 1. Durably record pending event before async ONNX inference
+    if (!await canReplay(event)) { await storageManager.resolvePendingEvent(event.id); return; }
+
+    // 2. Perform local model embedding and clustering
+    const updatedThread = await intentEngine.processEvent(event);
+
+    // 3. Atomically persist updated threads and remove from pending queue
+    const persisted = await storageManager.resolvePendingEvent(event.id, intentEngine.getThreads());
+    if (!persisted) { intentEngine.setThreads(Object.values((await storageManager.load()).threads)); return; }
+
     if (updatedThread) {
-      // Persist updated threads
-      await storageManager.saveThreads(intentEngine.getThreads());
       // Notify any open extension views (popup, dashboard, sidepanel)
       chrome.runtime.sendMessage({
         type: 'THREADS_UPDATED',
@@ -80,7 +126,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(async () => {
   console.log('[ThreadBack] Browser startup');
-  await initialize();
+  await serialize(async () => {
+    await initialize();
+    await replayPendingEvents();
+  });
 });
 
 // Periodic state synchronization alarm
@@ -89,6 +138,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'threadback_sync') {
     await serialize(async () => {
       await initialize();
+      intentEngine.pruneLatentThreads();
       await storageManager.saveThreads(intentEngine.getThreads());
     });
   }
@@ -96,6 +146,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Message Bus for UI components (Popup, Dashboard, Side Panel)
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.target === 'threadback-local-model') return false;
   serialize(() => handleMessage(message)).then(sendResponse).catch(err => {
     sendResponse({ success: false, error: err.message });
   });
@@ -108,9 +159,13 @@ async function handleMessage(message: any): Promise<any> {
   }
 
   switch (message.type) {
+    case 'REPLAY_PENDING_EVENTS': {
+      const count = await replayPendingEvents();
+      return { success: true, replayed: count, threads: intentEngine.getThreads() };
+    }
     case 'GET_ALL_THREADS': {
       const threads = intentEngine.getThreads();
-      return { success: true, threads, semanticModelStatus: localSemanticModel.status };
+      return { success: true, threads, semanticModelStatus: getLocalModelStatus(), modelDiagnostics: getModelDiagnostics() };
     }
 
     case 'GET_THREAD_BY_ID': {
@@ -119,7 +174,7 @@ async function handleMessage(message: any): Promise<any> {
     }
 
     case 'GET_ACTIVE_THREAD': {
-      const threads = intentEngine.getThreads();
+      const threads = intentEngine.getActiveThreads();
       const active = threads.find(t => t.status === 'ACTIVE') || threads[0];
       return { success: true, thread: active };
     }
@@ -199,13 +254,24 @@ async function handleMessage(message: any): Promise<any> {
       return { success: false, error: 'Thread not found' };
     }
 
+    case 'PROMOTE_LATENT_THREAD': {
+      const promoted = intentEngine.promoteLatentThread(message.threadId);
+      if (promoted) {
+        await storageManager.saveThreads(intentEngine.getThreads());
+        return { success: true, thread: promoted, threads: intentEngine.getThreads() };
+      }
+      return { success: false, error: 'Thread not found' };
+    }
+
     case 'CLEAR_ALL_DATA': {
+      await clearLocalModelState();
       await storageManager.clearAllData();
       intentEngine.setThreads([]);
       return { success: true, threads: [] };
     }
 
     case 'CLEAR_BROWSING_INTELLIGENCE': {
+      await clearLocalModelState();
       await storageManager.clearBrowsingIntelligence();
       intentEngine.setThreads([]);
       return { success: true, threads: [] };
@@ -250,5 +316,9 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   }).catch(err => console.error('[ThreadBack] State synchronization failed:', err));
 });
 
+// MV3 wake-up listeners must register synchronously, before storage/model awaits.
+activityCollector = new ActivityCollector(event => { void captureDurably(event).catch(err =>
+  console.error('[ThreadBack] Durable capture failed:', err)); }, DEFAULT_PRIVACY_SETTINGS);
+activityCollector.startListening();
 // Initial self-boot
 initialize();

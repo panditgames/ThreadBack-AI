@@ -1,3 +1,7 @@
+> **v1.2.0:** current architecture and verification are documented in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). Earlier dated test/engine notes below are historical.
+
+Current v1.2.0 verification: **181 tests passed / 0 failed (25 files)**; actual unpacked Chromium **23/23 passed**, including restart and four pending records replayed with zero loss/duplicates. See the current audit for curated semantic evidence and limitations.
+
 # ThreadBack AI test commands
 
 Run npm run typecheck, npm run lint, npm test, and npm run build. Dependencies are locked in package-lock.json; use npm ci on a clean checkout.

@@ -12,19 +12,19 @@ import { chromeMock } from '../setup';
 const event = (id: string, title: string, url = 'https://amazon.com/' + id) => ({ id, title, url, domain: new URL(url).hostname, pathname: '/', timestamp: Date.now(), tabId: 42, windowId: 1, eventType: 'navigation' as const, isInternalBrowserPage: false });
 
 describe('Release defect regressions', () => {
-  it('separates unrelated same-domain pages in the same tab immediately', () => {
+  it('separates unrelated same-domain pages in the same tab immediately', async () => {
     const engine = new IntentEngine();
-    engine.processEvent(event('shoes', 'Nike Running Shoes'));
-    engine.processEvent(event('audio', 'Sony Noise Cancelling Headphones'));
+    await engine.processEvent(event('shoes', 'Nike Running Shoes'));
+    await engine.processEvent(event('audio', 'Sony Noise Cancelling Headphones'));
     expect(engine.getThreads()).toHaveLength(2);
   });
-  it('deduplicates identical event IDs and routes close events back to the page', () => {
+  it('deduplicates identical event IDs and routes close events back to the page', async () => {
     const engine = new IntentEngine();
     const e = event('one', 'Sony Noise Cancelling Headphones');
-    const thread = engine.processEvent(e)!;
-    engine.processEvent(e);
+    const thread = (await engine.processEvent(e))!;
+    await engine.processEvent(e);
     expect(engine.getThread(thread.id)!.events).toHaveLength(1);
-    engine.processEvent({ ...e, id: 'closed', title: 'amazon.com', eventType: 'tab_closed' });
+    await engine.processEvent({ ...e, id: 'closed', title: 'amazon.com', eventType: 'tab_closed' });
     expect(engine.getThreads()).toHaveLength(1);
     expect(engine.getThread(thread.id)!.tabs[0].isClosed).toBe(true);
   });
@@ -90,13 +90,13 @@ describe('Release defect regressions', () => {
     expect(result.sourceThread.completedSteps.some(s => s.title.includes('GitHub'))).toBe(false);
     expect(result.newThread.evidence.primaryDomains).toEqual(['github.com']);
   });
-  it('avoids full inference on every event after the retained history reaches 100', () => {
+  it('avoids full inference on every event after the retained history reaches 100', async () => {
     const engine = new IntentEngine();
     const first = event('base', 'Consistent Research Topic');
-    for (let i = 0; i < 100; i++) engine.processEvent({ ...first, id: 'event-' + i, timestamp: first.timestamp + i });
+    for (let i = 0; i < 100; i++) await engine.processEvent({ ...first, id: 'event-' + i, timestamp: first.timestamp + i });
     const before = engine.getThreads()[0];
     const evidence = before.evidence;
-    engine.processEvent({ ...first, id: 'event-101', timestamp: first.timestamp + 101 });
+    await engine.processEvent({ ...first, id: 'event-101', timestamp: first.timestamp + 101 });
     expect(engine.getThreads()[0].events).toHaveLength(100);
     expect(engine.getThreads()[0].evidence).toBe(evidence);
   });

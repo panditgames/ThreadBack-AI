@@ -26,6 +26,7 @@ interface TaskCardProps {
   onSetStatus: (threadId: string, status: ThreadStatus) => void;
   onDelete: (threadId: string) => void;
   onSplit: (thread: IntentThread) => void;
+  onPromote?: (threadId: string) => void;
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({
@@ -38,6 +39,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onSetStatus,
   onDelete,
   onSplit,
+  onPromote,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(thread.title);
@@ -285,6 +287,24 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           )}
         </div>
       </div>
+
+      {thread.isLatent && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-2">
+          <div className="text-[11px] text-amber-300 font-medium flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            Standalone tab (latent intent)
+          </div>
+          {onPromote && (
+            <button
+              onClick={() => onPromote(thread.id)}
+              className="px-2 py-0.5 text-[10px] font-semibold text-amber-200 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg border border-amber-500/30 transition"
+              title="Promote this standalone tab into a persistent intent thread"
+            >
+              Promote to Thread
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Action Footer */}
       <div className="pt-3 border-t border-dark-border flex flex-wrap items-center justify-between gap-2">

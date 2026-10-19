@@ -1,3 +1,17 @@
+> **v1.2.0:** current architecture and verification are documented in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). Earlier dated test/engine notes below are historical.
+
+
+## Final local verification — 19 October 2026
+
+- Typecheck, lint, production build, extension verification and release/security scan passed.
+- Full automated suite: **181 passed, 0 failed across 25 files**.
+- Actual unpacked Chromium: **23/23 passed**, using isolated synthetic fixtures, real extension APIs and blocked external networking. The final run includes local BGE startup, cross-domain/new-topic grouping, separate controls, latent promotion, Why/Graph/Timeline, keyboard Escape, exact Resume reuse/reopen, manual controls, browser restart, privacy and erase.
+- Worker termination: three requested URLs, four durable pending metadata records; **0 lost, 0 duplicates** after actual worker termination and replay.
+- Twenty curated unseen-topic interleaved five-step workflows: **20/20 coherent**, no cross-purpose merges in that set. This is not a general accuracy estimate.
+- The final browser cold initialization plus first assignment measured **42,253 ms** on this machine; this is not Node timing or a universal performance claim. RAM was not measured.
+- Chromium restart testing exposed a harness wake-up race. The helper now waits for the worker stopped event and bounds its wake-up message; final replay passed without diagnostic keepalive.
+- GitHub CI and publication are separate gates on the exact pushed commit.
+
 # ThreadBack AI release handoff
 
 EurekaDev 2026 — Coding / Computer Science + AI. Final release verification completed 17 October 2026 (Asia/Calcutta).
