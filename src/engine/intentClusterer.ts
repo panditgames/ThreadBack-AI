@@ -5,7 +5,7 @@ import { inferThreadStatus, hasCompletionEvidence } from './statusInferer';
 import { parseUrl } from './urlParser';
 import { generateWhyExplanation } from './whyExplainer';
 import { PAGE_THRESHOLD, CANDIDATE_MARGIN, decideSemanticAssignment, representativePages } from './ai/semanticAssignment';
-import { workflowDocument, taskRelationship, strongTaskRelationship, divergentGroups, intentRevision } from './ai/continuousIntent';
+import { workflowDocument, taskRelationship, strongTaskRelationship, divergentGroups, intentRevision, WORKFLOW_MERGE_THRESHOLD } from './ai/continuousIntent';
 import {
   computeCosineSimilarity,
   generateEmbedding,
@@ -250,7 +250,12 @@ export class IntentEngine {
   private threads: Map<string, IntentThread> = new Map();
   private processedCounts = new Map<string, number>();
   private changedIntents = new Set<string>();
-  private reconciliationCursor = 0;
+
+  private reconciliationDiagnostics: any[] = [];
+  /** Bounded, in-memory diagnostics; never uploaded or persisted. Explicit inspection only. */
+  public getReconciliationDiagnostics(): any[] { return structuredClone(this.reconciliationDiagnostics); }
+  public hasPendingReconciliation(): boolean { return [...this.changedIntents].some(id=>{const t=this.threads.get(id);return t && !t.isDemo && t.status!=='ARCHIVED' && t.status!=='LIKELY_COMPLETE';}); }
+
   private eventQueue: Promise<unknown> = Promise.resolve();
 
   constructor(initialThreads?: IntentThread[]) {
@@ -325,6 +330,7 @@ export class IntentEngine {
     const changed=threads.filter(thread=>!this.threads.has(thread.id) || structure(thread)!==structure(this.threads.get(thread.id)!));
     for(const thread of changed)this.changedIntents.add(thread.id);
     this.threads.clear();
+    if(!threads.length){this.changedIntents.clear();this.reconciliationDiagnostics=[];}
     for (const id of this.processedCounts.keys()) {
       if (!threads.some(thread => thread.id === id)) this.processedCounts.delete(id);
     }
@@ -566,15 +572,18 @@ export class IntentEngine {
         actions.push(this.recordAction('ARCHIVE',[before],[thread],'All observed tabs are closed and the intent has had no activity beyond its retention window.'));}
     }
     const promoted=all.filter(thread=>thread.status!=='ARCHIVED' && thread.status!=='LIKELY_COMPLETE');
-    const rotating=promoted.length ? promoted.slice(this.reconciliationCursor).concat(promoted.slice(0,this.reconciliationCursor)) : [];
-    const selected=ids || [...new Set([...this.changedIntents,...rotating.map(thread=>thread.id)])];
-    this.reconciliationCursor=promoted.length ? (this.reconciliationCursor+budget)%promoted.length : 0;
+    // Persisted attempt times survive MV3 restarts. Reserve a fair slot even if dirty inference repeatedly fails.
+    const rotating=promoted.slice().sort((a,b)=>(a.lastReconciledAt || 0)-(b.lastReconciledAt || 0) || a.updatedAt-b.updatedAt);
+    const dirty=[...this.changedIntents].filter(id=>promoted.some(thread=>thread.id===id));
+    const selected=ids || [...new Set([...dirty.slice(0,Math.max(0,budget-1)),...rotating.map(thread=>thread.id),...dirty])];
     for(const id of selected.slice(0,budget)){
       this.changedIntents.delete(id);
       let thread=this.threads.get(id);
       if(!thread || thread.isDemo || thread.status==='ARCHIVED' || thread.status==='LIKELY_COMPLETE')continue;
+      thread.lastReconciledAt=now;
       try{
         if(thread.isLatent){actions.push(...await this.reconcileLatent(thread));continue;}
+        const previousWorkflowKey=thread.workflowDocumentKey;
         await this.ensureWorkflow(thread);
         const groups=divergentGroups(thread);
         if(groups){const before=this.snapshot(thread);const split=this.splitTabsFromThread(thread.id,groups[1]);
@@ -590,9 +599,17 @@ export class IntentEngine {
           .map(other=>({other,score:computeCosineSimilarity(thread!.centroidEmbedding!,other.centroidEmbedding!)}))
           .filter(item=>item.score>=0.60).sort((a,b)=>b.score-a.score).slice(0,6);
         const matches=[];
-        for(const {other} of candidates){await this.ensureWorkflow(other);const evidence=taskRelationship(thread,other);
-          if(evidence)matches.push({other,evidence});}
+        for(const {other} of candidates){const previousKey=other.workflowDocumentKey;await this.ensureWorkflow(other);const evidence=taskRelationship(thread,other);
+          if(evidence)matches.push({other,evidence,refreshed:previousKey!==other.workflowDocumentKey});}
         matches.sort((a,b)=>b.evidence.agreement-a.evidence.agreement);
+        this.reconciliationDiagnostics.push({timestamp:Date.now(),trigger:ids?'page-evidence':'workspace',threadId:id,
+          document:workflowDocument(thread),documentKey:thread.workflowDocumentKey,refreshed:previousWorkflowKey!==thread.workflowDocumentKey,
+          candidates:matches.map(({other,evidence,refreshed})=>({id:other.id,document:workflowDocument(other),refreshed,evidence,
+            crossPages:(thread!.semanticPages || []).map(p=>(other.semanticPages || []).map(q=>computeCosineSimilarity(p.vector,q.vector))),
+            requiredAgreement:WORKFLOW_MERGE_THRESHOLD,requiredMargin:CANDIDATE_MARGIN})),
+          margin:matches[1]?matches[0].evidence.agreement-matches[1].evidence.agreement:null,
+          decision:matches[0] && strongTaskRelationship(matches[0].evidence) && (!matches[1] || matches[0].evidence.agreement-matches[1].evidence.agreement>=CANDIDATE_MARGIN)?'MERGE':'KEEP'});
+        this.reconciliationDiagnostics=this.reconciliationDiagnostics.slice(-24);
         if(matches[0] && strongTaskRelationship(matches[0].evidence) && (!matches[1] || matches[0].evidence.agreement-matches[1].evidence.agreement>=CANDIDATE_MARGIN)){
           const other=matches[0].other; const older=thread.createdAt<=other.createdAt?thread:other;
           const newer=older===thread?other:thread;const before=[this.snapshot(older),this.snapshot(newer)];
@@ -811,6 +828,7 @@ export class IntentEngine {
     for(const thread of this.threads.values()) thread.managerActions=(thread.managerActions || []).filter(action=>
       !action.before.some(prior=>prior.id===threadId) && !action.after.some(after=>after.id===threadId));
     this.changedIntents.delete(threadId);
+    this.reconciliationDiagnostics=this.reconciliationDiagnostics.filter(item=>item.threadId!==threadId && !item.candidates?.some((candidate:any)=>candidate.id===threadId));
     return this.threads.delete(threadId);
   }
 

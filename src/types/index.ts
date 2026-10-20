@@ -124,6 +124,7 @@ export interface IntentThread {
   preserveSemanticBoundary?: boolean;
   isDemo?: boolean;
   lastInterruptionTimestamp?: number;
+  lastReconciledAt?: number;
   managerNameHeld?: boolean;
   workflowEmbedding?: number[];
   workflowDocumentKey?: string;

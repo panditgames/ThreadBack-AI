@@ -128,6 +128,31 @@ async function stateAudit() {
   });
 }
 async function continuousManagerAudit() {
+  await test('controlled cross-source review/video and comparison workflows reconcile',async()=>{
+    // Synthetic reconstruction only; original five titles/URLs were unavailable.
+    const pages=[['https://rtings.com/controlled-v131/review','The 4 Best On-Ear Headphones of 2026'],
+      ['https://youtube.com/watch?v=controlled-v131-a','Best on-ear headphones review'],
+      ['https://youtube.com/watch?v=controlled-v131-b','On-ear headphones compared'],
+      ['https://chatgpt.com/controlled-v131/a','Headphone Alternatives Comparison'],
+      ['https://chatgpt.com/controlled-v131/b','Compare on-ear headphone alternatives']];
+    for(const [url,title]of pages.slice(0,3))await open(url,title);
+    const a=await owner(pages[0][0]);assert.equal(a.tabs.length,3);
+    await dashboard.evaluate(async id=>{const key='threadback_data_v1',data=(await chrome.storage.local.get(key))[key];delete data.threads[id];await chrome.storage.local.set({[key]:data});},a.id);
+    await message({type:'GET_ALL_THREADS'});
+    for(const [url,title]of pages.slice(3))await open(url,title);
+    const b=await owner(pages[3][0]);assert.equal(b.tabs.length,2);
+    const start=Date.now();
+    await dashboard.evaluate(async a=>{const key='threadback_data_v1',data=(await chrome.storage.local.get(key))[key];data.threads[a.id]=a;await chrome.storage.local.set({[key]:data});},a);
+    await message({type:'RECONCILE_WORKSPACE'});
+    const merged=await owner(pages[0][0]);assert.equal(merged.tabs.length,5);assert.equal(merged.status,'ACTIVE');
+    assert.equal((await owner(pages[3][0])).id,merged.id);
+    const diagnostics=(await message({type:'GET_RECONCILIATION_DIAGNOSTICS'})).diagnostics;
+    const decision=diagnostics.find(d=>d.decision==='MERGE' && [a.id,b.id].includes(d.threadId));assert.ok(decision);
+    assert.ok((await state()).threads[merged.id].lastReconciledAt);
+    const ms=Date.now()-start;await restartWorker();assert.equal((await owner(pages[0][0])).tabs.length,5);
+    return {controlledFixture:true,ms,cycles:1,decision};
+  });
+
   await test('continuous: closed one-off stays hidden and expires without closing tabs', async () => {
     const p=await open('https://lookup.fixture.test/once','Random one-time lookup reference');const url=p.url();await p.close();
     await until(async()=>{

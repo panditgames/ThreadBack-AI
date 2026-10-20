@@ -139,6 +139,7 @@ export const chromeMock = {
     getURL: (path: string) => `chrome-extension://mock-threadback-extension-id/${path}`,
   },
   alarms: {
+    get: vi.fn().mockResolvedValue(undefined),
     create: vi.fn(),
     clear: vi.fn(),
     onAlarm: new MockEvent<(alarm: chrome.alarms.Alarm) => void>(),

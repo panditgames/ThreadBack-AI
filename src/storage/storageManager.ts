@@ -194,6 +194,7 @@ export class StorageManager {
         evidence: generateWhyExplanation(events, tabs),
         isLatent: typeof candidate.isLatent === 'boolean' ? candidate.isLatent : false,
         latentPromotionReason: candidate.latentPromotionReason,
+        lastReconciledAt: Number.isFinite(candidate.lastReconciledAt) ? candidate.lastReconciledAt : 0,
         managerActions: (Array.isArray(candidate.managerActions) ? candidate.managerActions : []).filter((action: any) =>
           action && typeof action.id === 'string' && ['MERGE','SPLIT','ARCHIVE','RENAME','REACTIVATE'].includes(action.kind) &&
           Number.isFinite(action.timestamp) && typeof action.reason === 'string' &&

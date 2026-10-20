@@ -9,6 +9,11 @@ import { parseUrl } from '../engine/urlParser';
 import { ActivityEvent, PrivacySettings } from '../types';
 
 const intentEngine = new IntentEngine();
+function scheduleReconciliation(): void {
+  if(intentEngine.hasPendingReconciliation())void chrome.alarms.get('threadback_reconcile').then(alarm=>{
+    if(!alarm && intentEngine.hasPendingReconciliation())chrome.alarms.create('threadback_reconcile', {delayInMinutes:0.5});
+  });
+}
 let activityCollector: ActivityCollector | null = null;
 let isInitialized = false;
 let initialization: Promise<void> | undefined;
@@ -86,6 +91,7 @@ async function initializeOnce() {
     await storageManager.saveThreads(intentEngine.getThreads());
 
 
+    scheduleReconciliation();
     isInitialized = true;
     console.log('[ThreadBack Service Worker] Initialized with', intentEngine.getThreads().length, 'threads');
   } catch (err) {
@@ -105,6 +111,7 @@ async function handleActivityEvent(event: ActivityEvent) {
     const persisted = await storageManager.resolvePendingEvent(event.id, intentEngine.getThreads());
     if (!persisted) { intentEngine.setThreads(Object.values((await storageManager.load()).threads)); return; }
 
+    scheduleReconciliation();
     if (updatedThread) {
       // Notify any open extension views (popup, dashboard, sidepanel)
       chrome.runtime.sendMessage({
@@ -137,11 +144,12 @@ chrome.runtime.onStartup.addListener(async () => {
 // Periodic state synchronization alarm
 chrome.alarms.create('threadback_sync', { periodInMinutes: 10 });
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === 'threadback_sync') {
+  if (alarm.name === 'threadback_sync' || alarm.name === 'threadback_reconcile') {
     await serialize(async () => {
       await initialize();
       await intentEngine.reconcileWorkspace();
       await storageManager.saveThreads(intentEngine.getThreads());
+      scheduleReconciliation();
     });
   }
 });
@@ -170,10 +178,12 @@ async function handleMessage(message: any): Promise<any> {
       return { success: true, threads, semanticModelStatus: getLocalModelStatus(), modelDiagnostics: getModelDiagnostics() };
     }
 
+    case 'GET_RECONCILIATION_DIAGNOSTICS': return {success:true,diagnostics:intentEngine.getReconciliationDiagnostics()};
     case 'RECONCILE_WORKSPACE': {
       intentEngine.setThreads(Object.values((await storageManager.load()).threads));
       const actions = await intentEngine.reconcileWorkspace();
       await storageManager.saveThreads(intentEngine.getThreads());
+      scheduleReconciliation();
       return { success: true, actions, threads: intentEngine.getThreads() };
     }
     case 'UNDO_INTENT_ACTION': {
@@ -327,7 +337,7 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   void serialize(async () => {
     const data = await storageManager.load();
     const structuralChange=intentEngine.setThreads(Object.values(data.threads));
-    if(structuralChange){await intentEngine.reconcileWorkspace();await storageManager.saveThreads(intentEngine.getThreads());}
+    if(structuralChange){await intentEngine.reconcileWorkspace();await storageManager.saveThreads(intentEngine.getThreads());scheduleReconciliation();}
     activityCollector?.updatePrivacySettings(data.privacy);
     chrome.runtime.sendMessage({ type: 'THREADS_UPDATED', threads: intentEngine.getThreads() }).catch(() => {});
   }).catch(err => console.error('[ThreadBack] State synchronization failed:', err));

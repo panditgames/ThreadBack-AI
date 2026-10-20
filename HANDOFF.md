@@ -1,3 +1,5 @@
+> **v1.3.1 release verification:** persistent fair reconciliation scheduling and bounded comparison diagnostics; original screenshot records unavailable. See [V1_3_1_AUDIT.md](V1_3_1_AUDIT.md). Publication is gated on final verification and successful CI for the exact release commit.
+
 > **Local v1.3.0 audit — 20 October 2026:** 197 tests passed / 0 failed (26 files); typecheck, lint, build, extension verification and security scan passed; real unpacked Chromium 31/31 passed. Five durable metadata records for three requested URLs replayed with zero loss/duplicates. Publication requires successful GitHub CI for the exact release commit. Current verification and behavioral limits are in [V1_3_AUDIT.md](V1_3_AUDIT.md).
 
 > **v1.2.0:** current architecture and verification are documented in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). Earlier dated test/engine notes below are historical.
