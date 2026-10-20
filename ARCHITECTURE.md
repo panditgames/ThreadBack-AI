@@ -1,3 +1,5 @@
+> **v1.3.0:** the continuous manager adds cached workflow-document embeddings, bounded periodic reconciliation and reversible actions. See [V1_3_AUDIT.md](V1_3_AUDIT.md) for the current decision rules. The v1.2.0 design below describes the preceding baseline.
+
 # ThreadBack AI architecture — v1.2.0
 
 Chrome/Edge Manifest V3; TypeScript and React. The sidepanel.html companion remains a normal extension page, not a registered native side panel.

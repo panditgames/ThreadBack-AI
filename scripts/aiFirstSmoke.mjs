@@ -127,10 +127,92 @@ async function stateAudit() {
     assert.equal(saved.threads[ids[0]].status, 'LIKELY_COMPLETE'); assert.equal(saved.threads[ids[1]].status, 'ARCHIVED'); assert.ok(!saved.threads[ids[2]]);
   });
 }
+async function continuousManagerAudit() {
+  await test('continuous: closed one-off stays hidden and expires without closing tabs', async () => {
+    const p=await open('https://lookup.fixture.test/once','Random one-time lookup reference');const url=p.url();await p.close();
+    await until(async()=>{
+      const all=await dashboard.evaluate(()=>chrome.storage.local.get(null));
+      const t=Object.values(all.threadback_data_v1?.threads || {}).find(t=>t.tabs.some(tab=>tab.url===url));
+      const pending=[...(all.threadback_data_v1?.pendingEvents || []),...Object.entries(all).filter(([key])=>key.startsWith('threadback_pending_v1:')).map(([,event])=>event)];
+      return t?.tabs.every(tab=>tab.isClosed) && !pending.some(event=>event.url===url) && Date.now()-t.updatedAt>1000;
+    },15000);assert.equal((await owner(url)).isLatent,true);
+    const count=(await worker.evaluate(()=>chrome.tabs.query({}))).length;
+    await dashboard.evaluate(async url=>{const key='threadback_data_v1';const data=(await chrome.storage.local.get(key))[key];
+      const t=Object.values(data.threads).find(t=>t.tabs.some(tab=>tab.url===url));const old=Date.now()-7*3600000;t.updatedAt=old;t.tabs.forEach(tab=>{tab.lastAccessed=old;});t.events.forEach(event=>{event.timestamp=old;});await chrome.storage.local.set({[key]:data});},url);
+    await message({type:'RECONCILE_WORKSPACE'});await until(async()=>!await owner(url),5000);assert.equal((await worker.evaluate(()=>chrome.tabs.query({}))).length,count);
+  });
+  let a,splitSource,splitAction;
+  await test('continuous: latent promotion immediately merges the duplicate EurekaDev/video workflow', async()=>{
+    await open('https://devpost.com/continuous/submission','EurekaDev Hackathon Submission');
+    await open('https://devpost.com/continuous/requirements','EurekaDev project submission requirements');
+    await open('https://chatgpt.com/continuous/guide','Branch · Hackathon participation guide');
+    a=await owner('https://devpost.com/continuous/submission');assert.equal(a.tabs.length,3);
+    await dashboard.evaluate(async id=>{const key='threadback_data_v1';const data=(await chrome.storage.local.get(key))[key];delete data.threads[id];await chrome.storage.local.set({[key]:data});},a.id);
+    await message({type:'GET_ALL_THREADS'});
+    await open('https://youtube.com/watch?v=continuous-first','How To Submit A Hackathon');
+    assert.equal((await owner('https://youtube.com/watch?v=continuous-first')).isLatent,true);
+    await dashboard.evaluate(async a=>{const key='threadback_data_v1';const data=(await chrome.storage.local.get(key))[key];data.threads[a.id]=a;await chrome.storage.local.set({[key]:data});},a);
+    await message({type:'GET_ALL_THREADS'});
+    await open('https://youtube.com/watch?v=continuous-second','Hackathon submission tutorial');
+    const merged=await owner('https://youtube.com/watch?v=continuous-second');assert.equal(merged.id,a.id);assert.equal(merged.tabs.length,5);
+    assert.ok(merged.managerActions.some(action=>action.kind==='MERGE'));a=merged;
+  });
+  await test('continuous: distinct purposes and arbitrary-order returns remain separate',async()=>{
+    await open('https://careers.fixture.test/guide','Software internship application guide');
+    await open('https://careers.fixture.test/requirements','Google SWE internship requirements');
+    const internship=await owner('https://careers.fixture.test/guide');assert.notEqual(internship.id,a.id);
+    await open('https://shop.fixture.test/product','Sony WH-1000XM5 noise cancelling headphones');
+    await open('https://review.fixture.test/product','Independent Sony WH-1000XM5 headphone review');
+    const shopping=await owner('https://shop.fixture.test/product');assert.ok(![a.id,internship.id].includes(shopping.id));
+    await open('https://devpost.com/continuous/return','EurekaDev hackathon submission guide');assert.equal((await owner('https://devpost.com/continuous/return')).id,a.id);
+    await open('https://careers.fixture.test/return','Software engineering internship application requirements');assert.equal((await owner('https://careers.fixture.test/return')).id,internship.id);
+    await message({type:'RECONCILE_WORKSPACE'});assert.notEqual((await owner('https://careers.fixture.test/guide')).id,(await owner('https://devpost.com/continuous/submission')).id);
+  });
+  await test('continuous: mixed multi-page workflow splits with real BGE evidence',async()=>{
+    await open('https://language.fixture.test/one','Practice French vowel pronunciation');await open('https://language.fixture.test/two','French vowel pronunciation exercises');
+    await open('https://repair.fixture.test/one','Bicycle derailleur repair');await open('https://repair.fixture.test/two','Fix a skipping bicycle chain');
+    const left=await owner('https://language.fixture.test/one'),right=await owner('https://repair.fixture.test/one');assert.notEqual(left.id,right.id);
+    await dashboard.evaluate(async({left,right})=>{const key='threadback_data_v1';const data=(await chrome.storage.local.get(key))[key];
+      data.threads[left.id]={...left,tabs:[...left.tabs,...right.tabs],events:[...left.events,...right.events],semanticPages:undefined,centroidEmbedding:undefined,workflowEmbedding:undefined,workflowDocumentKey:undefined,embeddingModelVersion:undefined,isManualCorrection:false,preserveSemanticBoundary:false,isLatent:false};
+      delete data.threads[right.id];await chrome.storage.local.set({[key]:data});},{left,right});
+    await message({type:'RECONCILE_WORKSPACE'});splitSource=await owner('https://language.fixture.test/one');const other=await owner('https://repair.fixture.test/one');
+    assert.notEqual(splitSource.id,other.id);splitAction=splitSource.managerActions.find(action=>action.kind==='SPLIT');assert.ok(splitAction);
+  });
+  await test('continuous: action history and Undo are usable in the actual Timeline',async()=>{
+    await dashboard.reload();const source=await owner('https://language.fixture.test/one');
+    const card=dashboard.locator('.task-card').filter({has:dashboard.getByRole('heading',{name:source.title,exact:true})}).first();
+    await card.getByRole('button',{name:'Timeline',exact:true}).click();const dialog=dashboard.getByRole('dialog');await dialog.getByRole('button',{name:'Undo split',exact:true}).click();
+    await until(async()=>(await owner('https://language.fixture.test/one')).id===(await owner('https://repair.fixture.test/one')).id);
+    const merged=await owner('https://language.fixture.test/one');assert.equal(merged.tabs.length,4);assert.ok(merged.managerActions.some(action=>action.id===splitAction.id&&action.undone));
+    const result=await message({type:'SPLIT_THREAD',sourceThreadId:merged.id,tabUrlsToExtract:['https://repair.fixture.test/one','https://repair.fixture.test/two'],newThreadTitle:'Controlled repair task'});assert.equal(result.success,true);
+  });
+  await test('continuous: closed stale promoted task archives and new evidence reactivates it',async()=>{
+    for(const p of context.pages())if(p.url().startsWith('https://language.fixture.test/'))await p.close();
+    await until(async()=>(await owner('https://language.fixture.test/one')).tabs.every(tab=>tab.isClosed));
+    const source=await owner('https://language.fixture.test/one');
+    await dashboard.evaluate(async id=>{const key='threadback_data_v1';const data=(await chrome.storage.local.get(key))[key];const t=data.threads[id],old=Date.now()-40*86400000;
+      t.updatedAt=old;t.tabs.forEach(tab=>{tab.lastAccessed=old;});t.events.forEach(event=>{event.timestamp=old;});await chrome.storage.local.set({[key]:data});},source.id);
+    await message({type:'RECONCILE_WORKSPACE'});assert.equal((await owner('https://language.fixture.test/one')).status,'ARCHIVED');
+    await open('https://language.fixture.test/return','French vowel pronunciation practice drills');const returned=await owner('https://language.fixture.test/return');
+    assert.equal(returned.id,source.id);assert.equal(returned.status,'ACTIVE');
+  });
+  await test('continuous: grounded rename follows grouping without changing membership',async()=>{
+    const task=await owner('https://shop.fixture.test/product');const urls=task.tabs.map(tab=>tab.url).sort();
+    await dashboard.evaluate(async id=>{const key='threadback_data_v1';const data=(await chrome.storage.local.get(key))[key];
+      data.threads[id].title='Opaque imported label';data.threads[id].isManualCorrection=false;await chrome.storage.local.set({[key]:data});},task.id);
+    await message({type:'RECONCILE_WORKSPACE'});const renamed=await owner('https://shop.fixture.test/product');
+    assert.notEqual(renamed.title,'Opaque imported label');assert.deepEqual(renamed.tabs.map(tab=>tab.url).sort(),urls);
+    assert.ok(renamed.managerActions.some(action=>action.kind==='RENAME'));
+  });
+  await test('continuous: history/cache persist and offline inference remains local',async()=>{
+    await restartWorker();const returned=await owner('https://language.fixture.test/return');assert.ok(returned.managerActions.length);
+    const diagnostics=(await message({type:'GET_ALL_THREADS'})).modelDiagnostics;assert.equal(diagnostics.blockedRequests,0);assert.ok(diagnostics.assets.every(url=>!/^https?:/.test(url)));
+  });
+}
 let hackathon, physics, deletedId, archivedId;
 try {
   await launch();
-  if (process.env.THREADBACK_V120_OPENER_ONLY) { await test('real incidental opener links remain separate', () => incidentalOpenerCheck('?verified=1')); } else if (process.env.THREADBACK_BGE_STATE_AUDIT) { await stateAudit(); } else {
+  if (process.env.THREADBACK_CONTINUOUS_ONLY) { await message({type:'CLEAR_ALL_DATA'}); await continuousManagerAudit(); await test('no unexpected console or worker errors',async()=>assert.deepEqual(errors,[])); } else if (process.env.THREADBACK_V120_OPENER_ONLY) { await test('real incidental opener links remain separate', () => incidentalOpenerCheck('?verified=1')); } else if (process.env.THREADBACK_BGE_STATE_AUDIT) { await stateAudit(); } else {
   await message({ type: 'CLEAR_ALL_DATA' });
   if (process.env.THREADBACK_AI_TARGETED) { await targetedRerun(); } else {
   await test('worker/dashboard/popup load', async () => { assert.ok(await dashboard.title()); const popup = await context.newPage(); await popup.setViewportSize({ width: 400, height: 650 }); await popup.goto('chrome-extension://' + extensionId + '/popup.html'); await popup.screenshot({ path: 'release/screenshots/ai-first-popup.png' }); await popup.keyboard.press('Tab'); assert.ok(await popup.evaluate(() => document.activeElement?.tagName !== 'BODY')); await popup.close(); });
@@ -241,6 +323,7 @@ try {
     const contexts = await worker.evaluate(() => chrome.runtime.getContexts({contextTypes:['OFFSCREEN_DOCUMENT']}));
     assert.equal(contexts.length, 0);
   });
+  await continuousManagerAudit();
   await test('no unexpected console or worker errors', async () => assert.deepEqual(errors, []));
   }
   }
@@ -251,6 +334,6 @@ try {
   const diagnostics = {storage,workerState,requests};
   await fs.writeFile('release/ai-first-diagnostics.json', JSON.stringify(diagnostics, null, 2));
   console.log('DIAGNOSTICS saved; last requests: ' + JSON.stringify(requests.slice(-8))); results.push({ name: 'browser audit infrastructure', status: 'FAIL', error: error.stack }); }
-finally { if (context) await context.close(); await fs.mkdir('release', { recursive: true }); await fs.writeFile(process.env.THREADBACK_V120_OPENER_ONLY ? 'release/v120-opener-smoke.json' : process.env.THREADBACK_BGE_STATE_AUDIT ? 'release/bge-state-audit.json' : process.env.THREADBACK_AI_TARGETED ? 'release/ai-first-targeted.json' : 'release/ai-first-smoke.json', JSON.stringify({ results, errors, isolatedProfile: true }, null, 2)); }
+finally { if (context) await context.close(); await fs.mkdir('release', { recursive: true }); await fs.writeFile(process.env.THREADBACK_CONTINUOUS_ONLY ? 'release/continuous-smoke.json' : process.env.THREADBACK_V120_OPENER_ONLY ? 'release/v120-opener-smoke.json' : process.env.THREADBACK_BGE_STATE_AUDIT ? 'release/bge-state-audit.json' : process.env.THREADBACK_AI_TARGETED ? 'release/ai-first-targeted.json' : 'release/ai-first-smoke.json', JSON.stringify({ results, errors, isolatedProfile: true }, null, 2)); }
 console.log(JSON.stringify({ passed: results.filter(r => r.status === 'PASS').length, failed: results.filter(r => r.status !== 'PASS').length }));
 if (results.some(r => r.status !== 'PASS')) process.exitCode = 1;

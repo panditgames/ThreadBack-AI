@@ -31,3 +31,7 @@ Resume Task opens selected task URLs, making normal browser requests to those si
 Only tabs, storage and alarms are requested. History import, content injection and host permissions are absent. Tests cover defaults, deletion, exclusions, unsafe URLs, denied tab access and offline AI fallback. See HANDOFF.md for actual release results and browser limitations.
 
 In published v1.1.1, TinySemanticClassifier was a second-stage, deterministic metadata resolver. The remainder of this paragraph describes that historical engine. It adds no network requests, backend, API key, telemetry, browser permissions, content extraction or persistent training examples. Domain strings cannot establish its semantic topic, and query context must match an observed search URL. Malformed input or classifier errors preserve the heuristic decision.
+
+## v1.3.0 local manager privacy
+
+Task-document embeddings and bounded action/Undo history stay in browser-local storage. Snapshots omit cached vectors and nested history. Delete/erase removes relevant history; Undo cannot revive individually deleted tasks. Closed latent one-offs expire after six hours, other latents after 24 hours (maximum 50); no expiry action closes browser tabs. Established tasks are archived rather than automatically deleted. History and embeddings are browsing-derived metadata, not application-encrypted. There is no additional permission, network service or page-content collection.

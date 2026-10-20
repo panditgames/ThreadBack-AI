@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ThreadBack AI - Task & Intent Memory",
   "short_name": "ThreadBack",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Remembers what you were trying to accomplish across browser tabs, not merely which tabs you opened.",
   "permissions": [
     "tabs",

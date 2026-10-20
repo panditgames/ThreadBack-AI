@@ -101,7 +101,7 @@ export const WhyModal: React.FC<WhyModalProps> = ({ thread, onClose }) => {
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-dark-border text-xs text-slate-400">
-          <span>Confidence: <strong className="text-white">{Math.round(thread.confidence * 100)}%</strong></span>
+          <span>Evidence: <strong className="text-white">Local metadata inference</strong></span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium transition"

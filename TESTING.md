@@ -1,3 +1,7 @@
+> **Final v1.3.0 local results:** 197 passed / 0 failed across 26 test files; actual unpacked Chromium 31/31. Retention tests age synthetic records; no personal profile/history is used. See [V1_3_AUDIT.md](V1_3_AUDIT.md) for limitations and the explicitly conservative budget/ANC case.
+
+> **v1.3.0:** targeted manager coverage: `npx vitest run tests/integration/continuousIntent.test.ts tests/integration/semanticGeneralization.test.ts`. After building, `node scripts/aiFirstSmoke.mjs` exercises the actual extension; `THREADBACK_CONTINUOUS_ONLY=1` limits it to the affected manager flows. Full browser verification must leave that flag unset.
+
 > **v1.2.0:** current architecture and verification are documented in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). Earlier dated test/engine notes below are historical.
 
 Current v1.2.0 verification: **181 tests passed / 0 failed (25 files)**; actual unpacked Chromium **23/23 passed**, including restart and four pending records replayed with zero loss/duplicates. See the current audit for curated semantic evidence and limitations.

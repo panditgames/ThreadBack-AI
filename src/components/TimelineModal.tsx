@@ -1,5 +1,5 @@
 import { useModalAccessibility } from '../ui/useModalAccessibility';
-import React from 'react';
+import React, { useState } from 'react';
 import { Clock, ExternalLink, Globe, Search, X } from 'lucide-react';
 import { IntentThread } from '../types';
 
@@ -9,6 +9,7 @@ interface TimelineModalProps {
 }
 
 export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose }) => {
+  const [undoError, setUndoError] = useState('');
   const modalRef = useModalAccessibility(thread != null, onClose);
   if (!thread) return null;
 
@@ -47,6 +48,18 @@ export const TimelineModal: React.FC<TimelineModalProps> = ({ thread, onClose })
           Chronological reconstructed path of how this intention developed across tabs.
         </p>
 
+        {!!thread.managerActions?.length && <section aria-label="Intent manager history" className="mb-4 max-h-48 overflow-y-auto space-y-2">
+          {thread.managerActions.slice().reverse().map(action => <div key={action.id} className="rounded-xl border border-dark-border p-3 text-xs">
+            <strong>Local AI: {action.kind.toLowerCase()}</strong><p>{action.reason}</p>
+            <span>{new Date(action.timestamp).toLocaleString()}</span>
+            {!action.undone && <button className="ml-3 text-brand-teal" onClick={async () => {
+              const result = await chrome.runtime.sendMessage({type:'UNDO_INTENT_ACTION',threadId:thread.id,actionId:action.id});
+              if(result.success) { setUndoError(''); onClose(); } else setUndoError(result.error || 'Unable to undo safely.');
+            }}>Undo {action.kind.toLowerCase()}</button>}
+            {action.undone && <span> · Undone</span>}
+          </div>)}
+          {undoError && <p role="status">{undoError}</p>}
+        </section>}
         {/* Timeline Events List */}
         <div className="flex-1 overflow-y-auto pr-2 space-y-4">
           {sortedEvents.length === 0 ? (

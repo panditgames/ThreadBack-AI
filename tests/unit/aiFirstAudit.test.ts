@@ -54,7 +54,7 @@ describe('Independent AI-first lifecycle regressions', () => {
     await engine.processEvent({ ...first, id: 'updated-title', title: 'Updated observed task title' });
     await engine.processEvent(event());
     expect(mocks.embed.mock.calls.flat().join(' ')).toContain('Updated observed task title');
-    expect(mocks.embed).toHaveBeenCalledTimes(3);
+    expect(mocks.embed).toHaveBeenCalledTimes(4); // Includes the new cached workflow-document embedding.
   });
   it('serializes simultaneous new pages and preserves all observations', async () => {
     const engine = new IntentEngine();
@@ -89,7 +89,7 @@ describe('Independent AI-first lifecycle regressions', () => {
     first.centroidEmbedding = [NaN]; first.embeddingModelVersion = 'old-model';
     const restored = new IntentEngine([first]); await restored.processEvent(event());
     expect(isValidEmbedding(restored.getThreads()[0].centroidEmbedding)).toBe(true);
-    expect(mocks.embed).toHaveBeenCalledTimes(3);
+    expect(mocks.embed).toHaveBeenCalledTimes(4); // Includes the new cached workflow-document embedding.
   });
   it('removes invented query context and bounds title input', async () => {
     const engine = new IntentEngine(); await engine.processEvent({ ...event(), title: 'x'.repeat(10000), searchQuery: 'invented query' });
@@ -170,4 +170,18 @@ it('never automatically coalesces or removes a completed workflow', async () => 
   expect((await recovered.processEvent({ ...event(), title:'Alternate observed purpose' }))!.id).toBe(active.id);
   expect(recovered.getThreads()).toHaveLength(2);
   expect(recovered.getThread(completed.id)?.status).toBe('LIKELY_COMPLETE');
+});
+
+it('reuses unchanged workflow documents across periodic passes', async () => {
+  const engine=new IntentEngine();await engine.processEvent(event());await engine.processEvent(event());
+  await engine.reconcileWorkspace();const calls=mocks.embed.mock.calls.length;
+  await engine.reconcileWorkspace();expect(mocks.embed).toHaveBeenCalledTimes(calls);
+});
+
+it('never turns a missing title into hostname semantic evidence after reload',async()=>{
+ const engine=new IntentEngine();const first=(await engine.processEvent({...event('https://opaque.example/lookup'),title:''}))!;
+ first.centroidEmbedding=undefined;first.semanticPages=undefined;
+ const recovered=new IntentEngine([first]);mocks.embed.mockClear();await recovered.reconcileWorkspace();
+ expect(mocks.embed.mock.calls.some(([text])=>String(text).includes('opaque.example'))).toBe(false);
+ expect(recovered.getThread(first.id)?.tabs[0].url).toBe('https://opaque.example/lookup');
 });

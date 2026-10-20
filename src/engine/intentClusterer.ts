@@ -1,11 +1,13 @@
-import { ActivityEvent, IntentStep, IntentThread, TabReference, ThreadStatus } from '../types';
+import { ActivityEvent, IntentManagerAction, IntentStep, IntentThread, TabReference, ThreadStatus } from '../types';
 import { extractQueryKeywords, extractTitleKeywords } from './keywords';
 import { inferNextAction } from './nextActionInferer';
 import { inferThreadStatus, hasCompletionEvidence } from './statusInferer';
 import { parseUrl } from './urlParser';
 import { generateWhyExplanation } from './whyExplainer';
-import { PAGE_THRESHOLD, CANDIDATE_MARGIN, decideSemanticAssignment, representativePages, reconciliationEvidence, RECONCILIATION_THRESHOLD } from './ai/semanticAssignment';
+import { PAGE_THRESHOLD, CANDIDATE_MARGIN, decideSemanticAssignment, representativePages } from './ai/semanticAssignment';
+import { workflowDocument, taskRelationship, strongTaskRelationship, divergentGroups, intentRevision } from './ai/continuousIntent';
 import {
+  computeCosineSimilarity,
   generateEmbedding,
   formatPageMetadata,
   centroidOf,
@@ -247,6 +249,8 @@ export function deriveMilestoneSteps(
 export class IntentEngine {
   private threads: Map<string, IntentThread> = new Map();
   private processedCounts = new Map<string, number>();
+  private changedIntents = new Set<string>();
+  private reconciliationCursor = 0;
   private eventQueue: Promise<unknown> = Promise.resolve();
 
   constructor(initialThreads?: IntentThread[]) {
@@ -283,17 +287,18 @@ export class IntentEngine {
       updatedAt: Date.now(),
     };
     this.threads.set(threadId, promoted);
+    this.changedIntents.add(threadId);
     return promoted;
   }
 
   public pruneLatentThreads(
     maxAgeMs = IntentEngine.LATENT_EXPIRATION_MS,
-    maxCount = IntentEngine.MAX_LATENT_CANDIDATES
+    maxCount = IntentEngine.MAX_LATENT_CANDIDATES,
+    now = Date.now()
   ): void {
-    const now = Date.now();
     for (const thread of Array.from(this.threads.values())) {
-      if (thread.isLatent && thread.status !== 'LIKELY_COMPLETE' && thread.status !== 'ARCHIVED' && (now - thread.updatedAt > maxAgeMs)) {
-        this.threads.delete(thread.id);
+      if (thread.isLatent && thread.status !== 'LIKELY_COMPLETE' && thread.status !== 'ARCHIVED' && (now - thread.updatedAt > (thread.tabs.every(tab => tab.isClosed) ? Math.min(maxAgeMs, 6 * 60 * 60 * 1000) : maxAgeMs))) {
+        this.deleteThread(thread.id);
         this.processedCounts.delete(thread.id);
       }
     }
@@ -305,7 +310,7 @@ export class IntentEngine {
     if (latentThreads.length > maxCount) {
       const toEvict = latentThreads.slice(maxCount);
       for (const t of toEvict) {
-        this.threads.delete(t.id);
+        this.deleteThread(t.id);
         this.processedCounts.delete(t.id);
       }
     }
@@ -315,7 +320,10 @@ export class IntentEngine {
     return this.threads.get(id);
   }
 
-  public setThreads(threads: IntentThread[]): void {
+  public setThreads(threads: IntentThread[]): boolean {
+    const structure=(thread:IntentThread)=>JSON.stringify([!!thread.isLatent,thread.tabs.map(tab=>[tab.url,tab.title,tab.isClosed])]);
+    const changed=threads.filter(thread=>!this.threads.has(thread.id) || structure(thread)!==structure(this.threads.get(thread.id)!));
+    for(const thread of changed)this.changedIntents.add(thread.id);
     this.threads.clear();
     for (const id of this.processedCounts.keys()) {
       if (!threads.some(thread => thread.id === id)) this.processedCounts.delete(id);
@@ -324,6 +332,7 @@ export class IntentEngine {
       this.threads.set(t.id, t);
     }
     this.pruneLatentThreads();
+    return changed.length>0;
   }
 
   public static readonly JOIN_THRESHOLD = CLUSTER_THRESHOLD;
@@ -333,7 +342,19 @@ export class IntentEngine {
    * Every new page/tab segregation decision is evaluated primarily by the local BGE model.
    */
   public processEvent(event: ActivityEvent): Promise<IntentThread | null> {
-    const result = this.eventQueue.then(() => this.assignEvent(event));
+    const result = this.eventQueue.then(async () => {
+      const url=typeof event.url==='string'?event.url.split('#')[0]:'';
+      let known:TabReference|undefined;
+      for(const thread of this.threads.values()){known=thread.tabs.find(tab=>tab.url.split('#')[0]===url);if(known)break;}
+      const title=typeof event.title==='string'?event.title.slice(0,1000):'';
+      const newMetadata=!known || (event.eventType!=='tab_closed' && !!title && known.title!==title);
+      const assigned = await this.assignEvent(event);
+      if (!assigned || !this.threads.has(assigned.id)) return assigned;
+      if(!newMetadata && !(event.eventType==='tab_closed' && assigned.tabs.every(tab=>tab.isClosed)))return assigned;
+      this.changedIntents.add(assigned.id);
+      await this.reconcileInternal([assigned.id], 1);
+      return this.getThreads().find(thread => thread.events.some(item => item.id === event.id)) || this.getThread(assigned.id) || null;
+    });
     this.eventQueue = result.then(() => undefined, () => undefined);
     return result;
   }
@@ -392,6 +413,7 @@ export class IntentEngine {
           this.threads.set(merged.id, merged);
           return merged;
         }
+        if(thread.status==='ARCHIVED' && knownTab.isClosed && event.eventType!=='tab_closed')this.reactivate(thread);
         if (event.eventType !== 'tab_closed' && event.title && knownTab.title !== event.title) {
           thread.centroidEmbedding = undefined; thread.semanticPages = undefined; thread.embeddingModelVersion = undefined;
         }
@@ -416,7 +438,7 @@ export class IntentEngine {
 
     const available: IntentThread[] = [];
     for (const thread of this.threads.values()) {
-      if (thread.status === 'ARCHIVED') continue;
+      if (thread.isDemo) continue;
       try { await this.ensureCentroid(thread); available.push(thread); } catch { /* Retain unavailable state without guessing. */ }
     }
     const assignment = decideSemanticAssignment(eventEmbedding, available);
@@ -424,6 +446,8 @@ export class IntentEngine {
     const matchScore = assignment?.score || 0;
 
     if (targetThread) {
+      const requiredThreshold=targetThread.status==='ARCHIVED'?0.74:IntentEngine.JOIN_THRESHOLD;
+      if (targetThread.status === 'ARCHIVED') this.reactivate(targetThread);
       const cleanUrl = event.url.split('#')[0];
       const pages = targetThread.semanticPages ? [...targetThread.semanticPages] : [];
       const existingIndex = pages.findIndex(p => p.url === cleanUrl);
@@ -438,10 +462,10 @@ export class IntentEngine {
 
       const updated = this.addEventToThread(
         targetThread,
-        { ...event, semanticSimilarity: matchScore, semanticThreshold: IntentEngine.JOIN_THRESHOLD },
+        { ...event, semanticSimilarity: matchScore, semanticThreshold: requiredThreshold },
         matchScore
       );
-      return this.reconcileSemanticWorkflows(updated, event.id);
+      return updated;
     } else {
       // Create new IntentThread with initial centroid (starts as LATENT to avoid singleton clutter)
       const newThread = this.createNewThread(event, eventEmbedding);
@@ -449,27 +473,149 @@ export class IntentEngine {
     }
   }
 
-  private reconcileSemanticWorkflows(thread: IntentThread, eventId: string): IntentThread {
-    if (thread.isLatent) return thread;
-    const matches = this.getThreads().filter(t => t.id !== thread.id && t.status !== 'ARCHIVED')
-      .map(t => reconciliationEvidence(t, thread)).filter((m): m is NonNullable<typeof m> => !!m)
-      .sort((a, b) => b.similarity - a.similarity);
-    const best = matches[0];
-    if (!best || (matches[1] && best.similarity - matches[1].similarity < CANDIDATE_MARGIN)) return thread;
-    const pages = representativePages([...(best.older.semanticPages || []), ...(best.newer.semanticPages || [])]);
-    const merged = this.mergeThreads(best.older.id, best.newer.id, false)!;
-    merged.semanticPages = pages;
-    merged.centroidEmbedding = centroidOf(pages.map(p => p.vector));
-    merged.embeddingModelVersion = EMBEDDING_VERSION;
-    merged.events = merged.events.map(event => event.id === eventId ? {
-      ...event, semanticSimilarity: best.similarity, semanticThreshold: RECONCILIATION_THRESHOLD,
-      semanticMatchKind: 'WORKFLOW' as const,
-    } : event);
-    merged.evidence = generateWhyExplanation(merged.events, merged.tabs);
-    const title = deriveThreadTitle(merged.events, merged.isManualCorrection ? merged.title : undefined);
-    merged.title = title.title; merged.summary = title.summary;
-    this.threads.set(merged.id, merged);
-    return merged;
+  /** Serialized, bounded background maintenance; no new browsing page is required. */
+  public reconcileWorkspace(now = Date.now(), budget = 4): Promise<IntentManagerAction[]> {
+    const result = this.eventQueue.then(() => this.reconcileInternal(undefined, Math.max(1,Math.min(8,budget)), now));
+    this.eventQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private snapshot(thread: IntentThread): IntentThread {
+    const copy = structuredClone(thread); delete copy.managerActions;
+    delete copy.workflowEmbedding;delete copy.workflowDocumentKey;delete copy.centroidEmbedding;
+    delete copy.semanticPages;delete copy.embeddingModelVersion;return copy;
+  }
+
+  private recordAction(kind: IntentManagerAction['kind'], before: IntentThread[], after: IntentThread[], reason: string,
+    evidence?: Record<string,number>): IntentManagerAction {
+    const action: IntentManagerAction = { id:'intent-action-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),
+      kind, timestamp:Date.now(), reason, evidence, before:before.map(thread=>this.snapshot(thread)),
+      after:after.map(thread=>({id:thread.id,revision:intentRevision(thread)})) };
+    const actionIds=[...new Map([...this.threads.values()].flatMap(thread=>thread.managerActions || []).concat(action).map(item=>[item.id,item])).values()]
+      .reverse().sort((a,b)=>b.timestamp-a.timestamp).slice(0,8).map(item=>item.id);
+    for(const thread of this.threads.values())thread.managerActions=(thread.managerActions || []).filter(item=>actionIds.includes(item.id));
+    for(const thread of after) thread.managerActions=[...(thread.managerActions || []),action].slice(-5);
+    return action;
+  }
+
+  private reactivate(thread: IntentThread): void {
+    const before=this.snapshot(thread); thread.status='ACTIVE';
+    this.recordAction('REACTIVATE',[before],[thread],'New observed activity returned to this saved intent.');
+  }
+
+  public undoManagerAction(threadId: string, actionId: string): boolean {
+    const action=this.threads.get(threadId)?.managerActions?.find(item=>item.id===actionId);
+    if(!action || action.undone || !action.before?.length || action.before.length>2 || !action.after?.length || action.after.length>2) return false;
+    if(action.after.some(item=>!this.threads.has(item.id) || intentRevision(this.threads.get(item.id)!)!==item.revision))return false;
+    const priorActions=[...new Map([...this.threads.values()].flatMap(thread=>thread.managerActions || []).map(item=>[item.id,item])).values()];
+    for(const item of action.after)this.threads.delete(item.id);
+    for(const prior of action.before){const restored=this.snapshot(prior);if(action.kind==='MERGE' || action.kind==='SPLIT')restored.preserveSemanticBoundary=true;
+      if(action.kind==='RENAME')restored.managerNameHeld=true;
+      restored.updatedAt=Date.now();
+      restored.managerActions=[...priorActions.filter(item=>item.id!==action.id && item.after.some(after=>after.id===prior.id)),{...action,undone:true}].slice(-5);this.threads.set(restored.id,restored);this.changedIntents.delete(restored.id);}
+    return true;
+  }
+
+  private async ensureWorkflow(thread: IntentThread): Promise<void> {
+    await this.ensureCentroid(thread);
+    const document=workflowDocument(thread), key=EMBEDDING_VERSION+'\n'+document;
+    if(!document)throw Error('No observed workflow metadata');
+    if(thread.workflowDocumentKey===key && isValidEmbedding(thread.workflowEmbedding))return;
+    thread.workflowEmbedding=await generateEmbedding(document); thread.workflowDocumentKey=key;
+  }
+
+  private async reconcileLatent(thread: IntentThread): Promise<IntentManagerAction[]> {
+    await this.ensureCentroid(thread);
+    const nearby=this.getLatentThreads().filter(other=>other.id!==thread.id && other.status!=='ARCHIVED' && other.status!=='LIKELY_COMPLETE' && !other.preserveSemanticBoundary && isValidEmbedding(other.centroidEmbedding))
+      .map(other=>({other,score:computeCosineSimilarity(thread.centroidEmbedding!,other.centroidEmbedding!)})).sort((a,b)=>b.score-a.score);
+    const best=nearby[0];
+    if(!best || best.score<PAGE_THRESHOLD || (nearby[1] && best.score-nearby[1].score<CANDIDATE_MARGIN))return [];
+    const first=thread.createdAt<=best.other.createdAt?thread:best.other,second=first===thread?best.other:thread;
+    const pages=representativePages([...(first.semanticPages || []),...(second.semanticPages || [])]);
+    const hypothesis:IntentThread={...thread,isLatent:false,workflowEmbedding:undefined,workflowDocumentKey:undefined,
+      tabs:[...new Map([...first.tabs,...second.tabs].map(tab=>[tab.url.split('#')[0],tab])).values()],
+      semanticPages:pages,centroidEmbedding:centroidOf(pages.map(page=>page.vector)),embeddingModelVersion:EMBEDDING_VERSION};
+    await this.ensureWorkflow(hypothesis);
+    // A page-level tie does not authorize a join. Require independent multi-page workflow corroboration.
+    const candidates=this.getThreads().filter(other=>!other.isLatent && !other.isDemo && other.status!=='ARCHIVED' &&
+      other.status!=='LIKELY_COMPLETE' && isValidEmbedding(other.centroidEmbedding))
+      .map(other=>({other,score:computeCosineSimilarity(hypothesis.centroidEmbedding!,other.centroidEmbedding!)}))
+      .filter(item=>item.score>=0.60).sort((a,b)=>b.score-a.score).slice(0,6);
+    const matches=[];
+    for(const {other}of candidates){await this.ensureWorkflow(other);const evidence=taskRelationship(hypothesis,other);if(evidence)matches.push(evidence);}
+    matches.sort((a,b)=>b.agreement-a.agreement);
+    if(!matches[0] || !strongTaskRelationship(matches[0]) || (matches[1] && matches[0].agreement-matches[1].agreement<CANDIDATE_MARGIN))return [];
+    const before=[this.snapshot(thread),this.snapshot(best.other)];
+    const promoted=this.mergeThreads(first.id,second.id,false)!;
+    promoted.semanticPages=pages;promoted.centroidEmbedding=hypothesis.centroidEmbedding;
+    promoted.embeddingModelVersion=EMBEDDING_VERSION;promoted.workflowEmbedding=hypothesis.workflowEmbedding;promoted.workflowDocumentKey=hypothesis.workflowDocumentKey;
+    const action=this.recordAction('MERGE',before,[promoted],'Latent continuation is corroborated by strong multi-page BGE workflow evidence.',matches[0]);
+    return [action,...await this.reconcileInternal([promoted.id],1)];
+  }
+
+  private async reconcileInternal(ids?: string[], budget=4, now=Date.now()): Promise<IntentManagerAction[]> {
+    this.pruneLatentThreads(undefined, undefined, now);
+    const actions:IntentManagerAction[]=[];
+    const all=this.getThreads().filter(thread=>!thread.isDemo);
+    // Lifecycle checks are cheap and never remove established tasks.
+    for(const thread of all){
+      if(thread.isLatent || thread.status==='ARCHIVED' || !thread.tabs.length || thread.tabs.some(tab=>!tab.isClosed))continue;
+      const last=Math.max(thread.updatedAt,...thread.tabs.map(tab=>tab.lastAccessed));
+      const retention=(thread.status==='LIKELY_COMPLETE'?7:30)*86400000;
+      if(now-last>=retention){const before=this.snapshot(thread);thread.status='ARCHIVED';
+        actions.push(this.recordAction('ARCHIVE',[before],[thread],'All observed tabs are closed and the intent has had no activity beyond its retention window.'));}
+    }
+    const promoted=all.filter(thread=>thread.status!=='ARCHIVED' && thread.status!=='LIKELY_COMPLETE');
+    const rotating=promoted.length ? promoted.slice(this.reconciliationCursor).concat(promoted.slice(0,this.reconciliationCursor)) : [];
+    const selected=ids || [...new Set([...this.changedIntents,...rotating.map(thread=>thread.id)])];
+    this.reconciliationCursor=promoted.length ? (this.reconciliationCursor+budget)%promoted.length : 0;
+    for(const id of selected.slice(0,budget)){
+      this.changedIntents.delete(id);
+      let thread=this.threads.get(id);
+      if(!thread || thread.isDemo || thread.status==='ARCHIVED' || thread.status==='LIKELY_COMPLETE')continue;
+      try{
+        if(thread.isLatent){actions.push(...await this.reconcileLatent(thread));continue;}
+        await this.ensureWorkflow(thread);
+        const groups=divergentGroups(thread);
+        if(groups){const before=this.snapshot(thread);const split=this.splitTabsFromThread(thread.id,groups[1]);
+          if(split){split.sourceThread.isManualCorrection=before.isManualCorrection;split.newThread.isManualCorrection=false;
+            split.sourceThread.preserveSemanticBoundary=false;split.newThread.preserveSemanticBoundary=false;
+            actions.push(this.recordAction('SPLIT',[before],[split.sourceThread,split.newThread],
+              'Two multi-page BGE clusters have strong internal support and weak cross-cluster similarity.'));
+            this.changedIntents.add(split.sourceThread.id);this.changedIntents.add(split.newThread.id);continue;}}
+        // Cheap model-vector prefilter over all saved workflows; only six documents need full comparison.
+        const candidates=this.getThreads().filter(other=>other.id!==id && !other.isLatent && !other.isDemo &&
+          other.status!=='ARCHIVED' && other.status!=='LIKELY_COMPLETE' && !other.preserveSemanticBoundary &&
+          isValidEmbedding(other.centroidEmbedding))
+          .map(other=>({other,score:computeCosineSimilarity(thread!.centroidEmbedding!,other.centroidEmbedding!)}))
+          .filter(item=>item.score>=0.60).sort((a,b)=>b.score-a.score).slice(0,6);
+        const matches=[];
+        for(const {other} of candidates){await this.ensureWorkflow(other);const evidence=taskRelationship(thread,other);
+          if(evidence)matches.push({other,evidence});}
+        matches.sort((a,b)=>b.evidence.agreement-a.evidence.agreement);
+        if(matches[0] && strongTaskRelationship(matches[0].evidence) && (!matches[1] || matches[0].evidence.agreement-matches[1].evidence.agreement>=CANDIDATE_MARGIN)){
+          const other=matches[0].other; const older=thread.createdAt<=other.createdAt?thread:other;
+          const newer=older===thread?other:thread;const before=[this.snapshot(older),this.snapshot(newer)];
+          const pages=representativePages([...(older.semanticPages || []),...(newer.semanticPages || [])]);
+          const merged=this.mergeThreads(older.id,newer.id,false)!;merged.semanticPages=pages;
+          merged.centroidEmbedding=centroidOf(pages.map(page=>page.vector));merged.embeddingModelVersion=EMBEDDING_VERSION;
+          actions.push(this.recordAction('MERGE',before,[merged],'Strong BGE workflow agreement corroborated by multiple member pages.',matches[0].evidence));
+          thread=merged;await this.ensureWorkflow(thread);
+        }
+        // Naming is downstream only: select an actually observed title closest to the task document.
+        if(!ids && !thread.managerNameHeld && !thread.isManualCorrection && !thread.preserveSemanticBoundary){
+          const best=(thread.semanticPages || []).map(page=>({page,score:computeCosineSimilarity(page.vector,thread!.workflowEmbedding!)}))
+            .sort((a,b)=>b.score-a.score)[0];
+          const tab=thread.tabs.find(tab=>tab.url.split('#')[0]===best?.page.url);
+          const title=tab ? formatPageMetadata(tab).slice(0,100) : '';
+          if(title && title!==thread.title && (!best || best.score>=0.70)){
+            const before=this.snapshot(thread);thread.title=title;thread.summary='Intent inferred from observed page metadata.';
+            actions.push(this.recordAction('RENAME',[before],[thread],'A representative observed page now best summarizes the workflow.'));
+          }
+        }
+      }catch{this.changedIntents.add(id); /* Failed local inference abstains and retries on a later bounded pass. */}
+    }
+    return actions;
   }
 
   private addEventToThread(
@@ -498,7 +644,7 @@ export class IntentEngine {
         tabId: event.tabId,
         windowId: event.windowId,
         url: event.url,
-        title: event.title || event.domain,
+        title: event.title || '',
         domain: event.domain,
         searchQuery: event.searchQuery,
         lastAccessed: event.timestamp,
@@ -582,7 +728,7 @@ export class IntentEngine {
         tabId: initialEvent.tabId,
         windowId: initialEvent.windowId,
         url: initialEvent.url,
-        title: initialEvent.title || initialEvent.domain,
+        title: initialEvent.title || '',
         domain: initialEvent.domain,
         searchQuery: initialEvent.searchQuery,
         lastAccessed: initialEvent.timestamp,
@@ -662,6 +808,9 @@ export class IntentEngine {
   }
 
   public deleteThread(threadId: string): boolean {
+    for(const thread of this.threads.values()) thread.managerActions=(thread.managerActions || []).filter(action=>
+      !action.before.some(prior=>prior.id===threadId) && !action.after.some(after=>after.id===threadId));
+    this.changedIntents.delete(threadId);
     return this.threads.delete(threadId);
   }
 
@@ -708,8 +857,10 @@ export class IntentEngine {
       preserveSemanticBoundary: manual ? false : target.preserveSemanticBoundary || source.preserveSemanticBoundary,
     };
 
+    this.changedIntents.add(targetThreadId);
     this.threads.set(targetThreadId, mergedThread);
     this.threads.delete(sourceThreadId);
+    this.processedCounts.delete(sourceThreadId);this.changedIntents.delete(sourceThreadId);
     return mergedThread;
   }
 
@@ -760,6 +911,7 @@ export class IntentEngine {
     const newThread: IntentThread = {
       id: newThreadId,
       preserveSemanticBoundary: true,
+      isLatent: false,
       title,
       summary,
       createdAt: extractedTabs[0]?.lastAccessed || Date.now(),
@@ -776,6 +928,7 @@ export class IntentEngine {
       isManualCorrection: true,
     };
 
+    this.changedIntents.add(sourceThreadId);this.changedIntents.add(newThreadId);
     this.threads.set(newThreadId, newThread);
     return { sourceThread: updatedSource, newThread };
   }

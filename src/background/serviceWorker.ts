@@ -81,7 +81,9 @@ async function initializeOnce() {
     // Replay any unresolved pending events from a prior worker restart/termination
     await replayPendingEvents();
 
-    // Initialize activity collector
+    // Bounded startup reconciliation also revisits existing workflows without a new page.
+    await intentEngine.reconcileWorkspace();
+    await storageManager.saveThreads(intentEngine.getThreads());
 
 
     isInitialized = true;
@@ -138,7 +140,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'threadback_sync') {
     await serialize(async () => {
       await initialize();
-      intentEngine.pruneLatentThreads();
+      await intentEngine.reconcileWorkspace();
       await storageManager.saveThreads(intentEngine.getThreads());
     });
   }
@@ -168,6 +170,17 @@ async function handleMessage(message: any): Promise<any> {
       return { success: true, threads, semanticModelStatus: getLocalModelStatus(), modelDiagnostics: getModelDiagnostics() };
     }
 
+    case 'RECONCILE_WORKSPACE': {
+      intentEngine.setThreads(Object.values((await storageManager.load()).threads));
+      const actions = await intentEngine.reconcileWorkspace();
+      await storageManager.saveThreads(intentEngine.getThreads());
+      return { success: true, actions, threads: intentEngine.getThreads() };
+    }
+    case 'UNDO_INTENT_ACTION': {
+      const success = intentEngine.undoManagerAction(message.threadId, message.actionId);
+      if (success) await storageManager.saveThreads(intentEngine.getThreads());
+      return { success, error: success ? undefined : 'Newer activity prevents safe undo.', threads: intentEngine.getThreads() };
+    }
     case 'GET_THREAD_BY_ID': {
       const thread = intentEngine.getThread(message.threadId);
       return { success: true, thread };
@@ -226,6 +239,7 @@ async function handleMessage(message: any): Promise<any> {
     case 'MERGE_THREADS': {
       const merged = intentEngine.mergeThreads(message.targetThreadId, message.sourceThreadId);
       if (merged) {
+        await intentEngine.reconcileWorkspace();
         await storageManager.saveThreads(intentEngine.getThreads());
         return { success: true, thread: merged, threads: intentEngine.getThreads() };
       }
@@ -239,6 +253,7 @@ async function handleMessage(message: any): Promise<any> {
         message.newThreadTitle
       );
       if (result) {
+        await intentEngine.reconcileWorkspace();
         await storageManager.saveThreads(intentEngine.getThreads());
         return { success: true, result, threads: intentEngine.getThreads() };
       }
@@ -257,6 +272,7 @@ async function handleMessage(message: any): Promise<any> {
     case 'PROMOTE_LATENT_THREAD': {
       const promoted = intentEngine.promoteLatentThread(message.threadId);
       if (promoted) {
+        await intentEngine.reconcileWorkspace();
         await storageManager.saveThreads(intentEngine.getThreads());
         return { success: true, thread: promoted, threads: intentEngine.getThreads() };
       }
@@ -310,7 +326,8 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local' || !changes[STORAGE_KEY]) return;
   void serialize(async () => {
     const data = await storageManager.load();
-    intentEngine.setThreads(Object.values(data.threads));
+    const structuralChange=intentEngine.setThreads(Object.values(data.threads));
+    if(structuralChange){await intentEngine.reconcileWorkspace();await storageManager.saveThreads(intentEngine.getThreads());}
     activityCollector?.updatePrivacySettings(data.privacy);
     chrome.runtime.sendMessage({ type: 'THREADS_UPDATED', threads: intentEngine.getThreads() }).catch(() => {});
   }).catch(err => console.error('[ThreadBack] State synchronization failed:', err));

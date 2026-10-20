@@ -99,6 +99,8 @@ export class StorageManager {
   public async deleteThread(threadId: string): Promise<void> {
     const data = await this.load();
     delete data.threads[threadId];
+    for (const thread of Object.values(data.threads)) thread.managerActions=(thread.managerActions || []).filter(action=>
+      !action.before.some(prior=>prior.id===threadId) && !action.after.some(after=>after.id===threadId));
     data.lastProcessedTimestamp = Date.now();
     if (data.activeThreadId === threadId) {
       data.activeThreadId = undefined;
@@ -192,6 +194,11 @@ export class StorageManager {
         evidence: generateWhyExplanation(events, tabs),
         isLatent: typeof candidate.isLatent === 'boolean' ? candidate.isLatent : false,
         latentPromotionReason: candidate.latentPromotionReason,
+        managerActions: (Array.isArray(candidate.managerActions) ? candidate.managerActions : []).filter((action: any) =>
+          action && typeof action.id === 'string' && ['MERGE','SPLIT','ARCHIVE','RENAME','REACTIVATE'].includes(action.kind) &&
+          Number.isFinite(action.timestamp) && typeof action.reason === 'string' &&
+          Array.isArray(action.before) && action.before.length<=2 && action.before.every((prior:any)=>prior && typeof prior.id==='string' && Array.isArray(prior.tabs) && Array.isArray(prior.events)) &&
+          Array.isArray(action.after) && action.after.length<=2 && action.after.every((after:any)=>after && typeof after.id==='string' && typeof after.revision==='string')).slice(-5),
       };
     }
     return {

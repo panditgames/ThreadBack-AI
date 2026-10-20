@@ -1,3 +1,5 @@
+> **Local v1.3.0 audit — 20 October 2026:** 197 tests passed / 0 failed (26 files); typecheck, lint, build, extension verification and security scan passed; real unpacked Chromium 31/31 passed. Five durable metadata records for three requested URLs replayed with zero loss/duplicates. Publication requires successful GitHub CI for the exact release commit. Current verification and behavioral limits are in [V1_3_AUDIT.md](V1_3_AUDIT.md).
+
 > **v1.2.0:** current architecture and verification are documented in [V1_2_RELEASE_AUDIT.md](V1_2_RELEASE_AUDIT.md). Earlier dated test/engine notes below are historical.
 
 

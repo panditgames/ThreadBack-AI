@@ -25,25 +25,9 @@ export function workflowSupport(vector: number[], thread: IntentThread) {
 }
 
 export function decideSemanticAssignment(vector: number[], threads: IntentThread[]) {
-  const ranked = threads.filter(t => t.status !== 'ARCHIVED')
+  const ranked = threads
     .map(t => workflowSupport(vector, t)).sort((a, b) => b.score - a.score);
   const best = ranked[0];
   const margin = ranked[1] ? best.score - ranked[1].score : Infinity;
-  return best && best.score >= PAGE_THRESHOLD && margin >= CANDIDATE_MARGIN ? best : null;
-}
-
-/** Corroborate two multi-page workflows without letting a new bridge replace the original purpose. */
-export function reconciliationEvidence(a: IntentThread, b: IntentThread) {
-  if (a.preserveSemanticBoundary || b.preserveSemanticBoundary ||
-      [a.status, b.status].some(status => status === 'LIKELY_COMPLETE' || status === 'ARCHIVED')) return null;
-  const older = a.createdAt <= b.createdAt ? a : b;
-  const newer = older === a ? b : a;
-  const oldPages = representativePages(older.semanticPages || []);
-  const newPages = representativePages(newer.semanticPages || []);
-  if (oldPages.length < 2 || newPages.length < 2 || older.isLatent || newer.isLatent) return null;
-  const newCentroid = centroidOf(newPages.map(p => p.vector));
-  const similarity = computeCosineSimilarity(centroidOf(oldPages.map(p => p.vector)), newCentroid);
-  const anchorAgreement = computeCosineSimilarity(oldPages[0].vector, newCentroid);
-  return similarity >= RECONCILIATION_THRESHOLD && anchorAgreement >= ANCHOR_THRESHOLD
-    ? { older, newer, similarity, anchorAgreement } : null;
+  return best && best.score >= (best.thread.status === 'ARCHIVED' ? 0.74 : PAGE_THRESHOLD) && margin >= (best.thread.status === 'ARCHIVED' ? 0.05 : CANDIDATE_MARGIN) ? best : null;
 }

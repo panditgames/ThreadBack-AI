@@ -1,3 +1,5 @@
+> **v1.3.0:** continuous local intent management, with release evidence and known limitations documented below. See [V1_3_AUDIT.md](V1_3_AUDIT.md).
+
 # ThreadBack AI 🧠⚡
 
 > **Browser history remembers pages. Bookmarks remember URLs. ThreadBack AI remembers unfinished intentions.**

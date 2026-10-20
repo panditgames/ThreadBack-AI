@@ -94,6 +94,17 @@ export interface IntentGraph {
   edges: IntentGraphEdge[];
 }
 
+export interface IntentManagerAction {
+  id: string;
+  kind: 'MERGE' | 'SPLIT' | 'ARCHIVE' | 'RENAME' | 'REACTIVATE';
+  timestamp: number;
+  reason: string;
+  evidence?: Record<string, number>;
+  before: IntentThread[];
+  after: { id: string; revision: string }[];
+  undone?: boolean;
+}
+
 export interface IntentThread {
   id: string;
   title: string;
@@ -113,6 +124,10 @@ export interface IntentThread {
   preserveSemanticBoundary?: boolean;
   isDemo?: boolean;
   lastInterruptionTimestamp?: number;
+  managerNameHeld?: boolean;
+  workflowEmbedding?: number[];
+  workflowDocumentKey?: string;
+  managerActions?: IntentManagerAction[];
   centroidEmbedding?: number[];
   embeddingModelVersion?: string;
   semanticPages?: { url: string; vector: number[] }[];
